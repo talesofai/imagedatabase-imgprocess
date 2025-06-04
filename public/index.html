@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="https://oss.talesofai.cn/static/official/assets/asset.191b323b_Z1ocIPz.svg"
+    />
+    <title>图像处理与上传 API 文档和测试</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="./index.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2, h3, h4 { color: #333; }
+        h1 { border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        code { color: black; background: #e8e8e8; padding: 2px 6px; border-radius: 4px; font-family: 'Courier New', Courier, monospace; }
+        pre { background-color: #2d2d2d; color: #f8f8f2; padding: 15px; border-radius: 5px; overflow-x: auto; }
+        .endpoint { margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
+        .method { display: inline-block; padding: 5px 10px; border-radius: 4px; color: #fff; font-weight: bold; text-transform: uppercase; }
+        .post { background-color: #4CAF50; }
+        .get { background-color: #2196F3; }
+        .put { background-color: #f0ad4e; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        label { display: block; margin-top: 10px; font-weight: bold; }
+        input[type="file"], input[type="text"], button, select {
+            padding: 10px;
+            margin-top: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button { background-color: #007bff; color: white; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #statusArea, #processStatus, #captionStatus {
+            margin-top: 15px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            min-height: 50px;
+            white-space: pre-wrap; /* Allows line breaks */
+            word-break: break-all;
+        }
+        #fileProgressContainer {
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            background-color: #fdfdfd;
+        }
+        .file-entry {
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+        .file-entry:last-child {
+            border-bottom: none;
+        }
+        .file-success { color: green; }
+        .file-error { color: red; }
+        .file-processing { color: #d88000; } /* Orange-ish for processing */
+
+        #overallProgressContainer {
+            margin-top: 15px;
+        }
+        #overallProgressBar {
+            width: 100%;
+            height: 20px;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>图像处理与上传 API</h1>
+        <p>本文档提供 API 端点说明，并允许直接在浏览器中测试部分功能。</p>
+        <p><strong>通用认证:</strong> 大部分 POST 端点需要 Bearer Token 进行认证。请在下方输入您的 Token：</p>
+        <label for="authToken">Auth Token:</label>
+        <input type="text" id="authToken" name="authToken" placeholder="请输入您的认证Token" style="width: 100%;">
+
+        <div class="endpoint">
+            <h2><span class="method post">POST</span> /api/v1/upload - 直接上传图像文件</h2>
+            <p>此端点接收包含图像文件的 FormData，并将其直接上传到 R2 存储。客户端应使用 HTTP POST 方法并包含 <code>imageFile</code> 和 <code>fileName</code> 字段。</p>
+            <h3>请求体 (FormData)</h3>
+            <ul>
+                <li><code>imageFile</code>: (File) 要上传的图像文件。</li>
+                <li><code>fileName</code>: (String) 图像的原始文件名。</li>
+            </ul>
+            <p>认证通过 <code>Authorization: Bearer YOUR_ACCESS_TOKEN</code> 请求头传递。</p>
+            <h3>成功响应 (200 OK)</h3>
+            <pre><code>{
+  "success": true,
+  "r2Path": "uploads/unprocessed/1678886400000_example.jpg",
+  "message": "File uploaded successfully"
+}</code></pre>
+            <h3>前端测试：ZIP 包内图片批量上传</h3>
+            <label for="zipFile">选择一个包含图片的 ZIP 文件:</label>
+            <input type="file" id="zipFile" name="zipFile" accept=".zip">
+            <button onclick="handleZipUpload()">上传并处理ZIP包</button>
+            <h4>状态:</h4>
+            <div id="statusArea">请选择一个 ZIP 文件并点击上传。</div>
+            <div id="overallProgressContainer" class="hidden">
+                <label for="overallProgressBar">总进度:</label>
+                <progress id="overallProgressBar" value="0" max="100"></progress>
+                <span id="overallProgressText" style="margin-left: 10px;">0/0</span>
+            </div>
+            <div id="fileProgressContainer" class="hidden"></div>
+        </div>
+
+        <div class="endpoint">
+            <h2><span class="method post">POST</span> /api/v1/process - 处理 R2 中的图像</h2>
+            <p>此端点接收一个指向 R2 存储中图像的路径 (<code>r2SourcePath</code>)，然后执行图像调整大小和格式转换，并将处理后的版本存回 R2。</p>
+            <h3>请求体 (JSON)</h3>
+            <pre><code>{
+  "r2SourcePath": "uploads/unprocessed/1678886400000_example.jpg" // 通常是上传步骤返回的 r2Path
+  // "token": "YOUR_ACCESS_TOKEN" // Token is now passed via Authorization header
+}</code></pre>
+            <table>
+              <thead><tr><th>字段</th><th>类型</th><th>描述</th><th>是否必须</th></tr></thead>
+              <tbody>
+                <tr><td><code>r2SourcePath</code></td><td>String</td><td>图像在 R2 存储桶中的完整路径。</td><td>是</td></tr>
+              </tbody>
+            </table>
+            <h3>成功响应 (200 OK)</h3>
+            <pre><code>{
+  "success": true,
+  "originpath": "uploads/unprocessed/1678886400000_example", // R2中原始图像的对象键 (不含扩展名)
+  "url": "https://<YOUR_R2_PUBLIC_DOMAIN>/uploads/unprocessed/1678886400000_example.jpg" // R2中原始图像的公开URL
+}</code></pre>
+            <p>调整大小后的图像 (256px, 1024px, 2048px 短边的 WebP 格式) 会被上传到 R2 存储中。其路径格式为 <code>[r2SourcePath去除了顶级目录和扩展名]_[尺寸].webp</code>。</p>
+            <h4>前端测试：处理已上传的图像</h4>
+            <label for="processR2Path">R2 Source Path (来自上传步骤):</label>
+            <input type="text" id="processR2Path" name="processR2Path" placeholder="例如: uploads/unprocessed/timestamp_image.jpg" style="width: 100%;">
+            <button onclick="handleImageProcess()">处理图像</button>
+            <h4>状态:</h4>
+            <div id="processStatus">请输入 R2 路径并点击处理。</div>
+        </div>
+
+        <div class="endpoint">
+            <h2><span class="method post">POST</span> /api/v1/caption - 为 R2 中的图像生成标签/描述</h2>
+            <p>此端点接收一个指向 R2 存储中图像的路径 (<code>r2SourcePath</code>)，然后使用 Google Gemini API 为该图像生成标签。</p>
+            <h3>请求体 (JSON)</h3>
+            <pre><code>{
+  "r2SourcePath": "uploads/unprocessed/1678886400000_example.jpg", // 通常是上传步骤返回的 r2Path
+  // "token": "YOUR_ACCESS_TOKEN" // Token is now passed via Authorization header
+  "model": "gemini-pro-vision", // 可选
+  "prompt": "Generate a list of relevant tags for this image." // 可选
+}</code></pre>
+            <table>
+              <thead><tr><th>字段</th><th>类型</th><th>描述</th><th>是否必须</th></tr></thead>
+              <tbody>
+                <tr><td><code>r2SourcePath</code></td><td>String</td><td>图像在 R2 存储桶中的完整路径。</td><td>是</td></tr>
+                <tr><td><code>model</code></td><td>String</td><td>可选，指定使用的 Gemini 模型。</td><td>否</td></tr>
+                <tr><td><code>prompt</code></td><td>String</td><td>可选，提供给 Gemini API 的提示语。</td><td>否</td></tr>
+              </tbody>
+            </table>
+            <h3>成功响应 (200 OK)</h3>
+            <pre><code>{
+  "success": true,
+  "caption": ["tag1", "tag2", "relevant tag"]
+}</code></pre>
+            <h4>前端测试：为已上传的图像生成标签</h4>
+            <label for="captionR2Path">R2 Source Path (来自上传步骤):</label>
+            <input type="text" id="captionR2Path" name="captionR2Path" placeholder="例如: uploads/unprocessed/timestamp_image.jpg" style="width: 100%;">
+            <label for="captionModel">Gemini Model (可选):</label>
+            <input type="text" id="captionModel" name="captionModel" placeholder="例如: gemini-1.5-flash-latest">
+            <label for="captionPrompt">Prompt (可选):</label>
+            <input type="text" id="captionPrompt" name="captionPrompt" placeholder="例如: Describe this image in detail.">
+            <button onclick="handleImageCaption()">生成标签</button>
+            <h4>状态:</h4>
+            <div id="captionStatus">请输入 R2 路径并点击生成标签。</div>
+        </div>
+
+
+        <div class="endpoint">
+            <h2><span class="method get">GET</span> /api/v1/health - 健康检查</h2>
+            <p>此端点用于检查 API 服务的健康状态。</p>
+            <h3>成功响应 (200 OK)</h3>
+            <pre><code>{
+  "status": "ok",
+  "timestamp": "YYYY-MM-DDTHH:mm:ss.sssZ"
+}</code></pre>
+        </div>
+
+        <p style="text-align: center; margin-top: 30px; color: #777;">
+            API 文档 - 最后更新于 2025年5月27日
+        </p>
+    </div>
+
+    <script>
+
+    </script>
+</body>
+</html>

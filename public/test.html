@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="https://oss.talesofai.cn/static/official/assets/asset.191b323b_Z1ocIPz.svg"
+    />
+    <title>图像处理 API 测试界面</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        background-color: #f4f4f4;
+        color: #333;
+      }
+      .container {
+        max-width: 1200px;
+        margin: auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      h1,
+      h2 {
+        color: #333;
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+      }
+      .test-section {
+        margin-bottom: 40px;
+        padding: 20px;
+        background: #f9f9f9;
+        border-radius: 8px;
+        border-left: 4px solid #4caf50;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+        color: #555;
+      }
+      input[type='text'],
+      input[type='file'],
+      textarea,
+      select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+      textarea {
+        height: 80px;
+        resize: vertical;
+      }
+      button {
+        background-color: #4caf50;
+        color: white;
+        padding: 12px 24px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+      }
+      button:hover {
+        background-color: #45a049;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      .response {
+        margin-top: 20px;
+        padding: 15px;
+        background: #fff;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .response pre {
+        background: #f5f5f5;
+        padding: 10px;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .success {
+        border-left: 4px solid #4caf50;
+      }
+      .error {
+        border-left: 4px solid #f44336;
+      }
+      .loading {
+        border-left: 4px solid #2196f3;
+      }
+      .endpoint-url {
+        background: #e3f2fd;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-family: monospace;
+        margin-bottom: 15px;
+        word-break: break-all;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      @media (max-width: 768px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .copy-btn {
+        background-color: #2196f3;
+        font-size: 12px;
+        padding: 5px 10px;
+        margin-left: 10px;
+      }
+      .copy-btn:hover {
+        background-color: #1976d2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>图像处理 API 测试界面</h1>
+      <p>
+        这个页面可以帮助您测试所有可用的 API
+        端点。请根据需要填写表单并点击"发送请求"按钮。
+      </p>
+
+      <!-- Global Authorization Token -->
+      <div class="test-section" style="border-left: 4px solid #ff9800">
+        <h2>🔐 全局身份验证</h2>
+        <p style="color: #f57c00; font-weight: bold">
+          ⚠️ 所有API端点都需要Bearer token验证
+        </p>
+        <div class="form-group">
+          <label for="global-token">Authorization Token:</label>
+          <input
+            type="text"
+            id="global-token"
+            placeholder="Bearer YOUR_ACCESS_TOKEN"
+            required
+            style="border: 2px solid #ff9800"
+          />
+        </div>
+        <button onclick="testToken()" style="background-color: #ff9800">
+          验证 Token
+        </button>
+        <div id="token-response" class="response" style="display: none"></div>
+      </div>
+
+      <!-- Health Check -->
+      <div class="test-section">
+        <h2>🏥 健康检查 (Health Check)</h2>
+        <div class="endpoint-url">GET /api/v1/health</div>
+        <button onclick="testHealth()">检查服务状态</button>
+        <div id="health-response" class="response" style="display: none"></div>
+      </div>
+
+      <!-- Upload -->
+      <div class="test-section">
+        <h2>📤 上传图像 (Upload)</h2>
+        <div class="endpoint-url">POST /api/v1/upload</div>
+        <form id="upload-form">
+          <div class="form-group">
+            <label for="upload-file">选择图像文件:</label>
+            <input type="file" id="upload-file" accept="image/*" required />
+          </div>
+          <div class="form-group">
+            <label for="upload-filename"
+              >文件名 (可选，默认使用文件原名):</label
+            >
+            <input type="text" id="upload-filename" placeholder="example.jpg" />
+          </div>
+          <div class="form-group">
+            <label for="upload-collection-id">Collection ID (可选):</label>
+            <input
+              type="text"
+              id="upload-collection-id"
+              placeholder="collection-uuid"
+            />
+          </div>
+          <div class="form-group">
+            <label for="upload-collection-name">Collection Name (可选):</label>
+            <input
+              type="text"
+              id="upload-collection-name"
+              placeholder="我的图像集合"
+            />
+            <small style="color: #666; font-style: italic">
+              如果指定名称的collection不存在，将自动创建。ID优先级高于名称。
+            </small>
+          </div>
+          <button type="submit">上传图像</button>
+        </form>
+        <div id="upload-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="grid">
+        <!-- Process -->
+        <div class="test-section">
+          <h2>⚙️ 处理图像 (Process)</h2>
+          <div class="endpoint-url">POST /api/v1/process</div>
+          <form id="process-form">
+            <div class="form-group">
+              <label for="process-path">R2 源路径:</label>
+              <input
+                type="text"
+                id="process-path"
+                placeholder="original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
+                required
+              />
+              <button
+                type="button"
+                class="copy-btn"
+                onclick="copyFromUpload('process-path')"
+              >
+                从上传结果复制
+              </button>
+            </div>
+            <button type="submit">处理图像</button>
+          </form>
+          <div
+            id="process-response"
+            class="response"
+            style="display: none"
+          ></div>
+        </div>
+
+        <!-- Caption -->
+        <div class="test-section">
+          <h2>🏷️ 生成标签 (Caption)</h2>
+          <div class="endpoint-url">POST /api/v1/caption</div>
+          <form id="caption-form">
+            <div class="form-group">
+              <label for="caption-path">R2 源路径:</label>
+              <input
+                type="text"
+                id="caption-path"
+                placeholder="original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
+                required
+              />
+              <button
+                type="button"
+                class="copy-btn"
+                onclick="copyFromUpload('caption-path')"
+              >
+                从上传结果复制
+              </button>
+            </div>
+            <div class="form-group">
+              <label for="caption-model">模型 (可选):</label>
+              <select id="caption-model">
+                <option value="">默认 (gemini-2.5-pro-preview-05-06)</option>
+                <option value="gemini-2.5-pro-preview-05-06">
+                  gemini-2.5-pro-preview-05-06
+                </option>
+                <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="caption-prompt">提示语 (可选):</label>
+              <textarea
+                id="caption-prompt"
+                placeholder="Generate a list of relevant tags for this image. Provide them as a comma-separated list."
+              ></textarea>
+            </div>
+            <button type="submit">生成标签</button>
+          </form>
+          <div
+            id="caption-response"
+            class="response"
+            style="display: none"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Collection Operations -->
+      <div class="test-section">
+        <h2>📁 Collection 管理</h2>
+
+        <h3>创建 Collection</h3>
+        <div class="endpoint-url">POST /api/v1/collection</div>
+        <form id="collection-create-form">
+          <div class="form-group">
+            <label for="collection-name">Collection 名称:</label>
+            <input
+              type="text"
+              id="collection-name"
+              placeholder="我的图像集合"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="collection-description">描述 (可选):</label>
+            <textarea
+              id="collection-description"
+              placeholder="集合描述"
+            ></textarea>
+          </div>
+          <div class="form-group">
+            <label for="collection-creator">创建者 ID (可选):</label>
+            <input
+              type="text"
+              id="collection-creator"
+              placeholder="user-uuid"
+            />
+          </div>
+          <div class="form-group">
+            <label for="collection-cover">封面 Artifact ID (可选):</label>
+            <input
+              type="text"
+              id="collection-cover"
+              placeholder="artifact-uuid"
+            />
+          </div>
+          <button type="submit">创建 Collection</button>
+        </form>
+        <div
+          id="collection-create-response"
+          class="response"
+          style="display: none"
+        ></div>
+
+        <div class="grid" style="margin-top: 30px">
+          <div>
+            <h3>按 ID 添加图像到 Collection</h3>
+            <div class="endpoint-url">POST /api/v1/collection/add-artifact</div>
+            <form id="collection-add-form">
+              <div class="form-group">
+                <label for="add-collection-id">Collection ID:</label>
+                <input
+                  type="text"
+                  id="add-collection-id"
+                  placeholder="collection-uuid"
+                  required
+                />
+                <button
+                  type="button"
+                  class="copy-btn"
+                  onclick="copyFromCollection('add-collection-id')"
+                >
+                  从创建结果复制
+                </button>
+              </div>
+              <div class="form-group">
+                <label for="add-r2-path">R2 源路径:</label>
+                <input
+                  type="text"
+                  id="add-r2-path"
+                  placeholder="original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
+                  required
+                />
+                <button
+                  type="button"
+                  class="copy-btn"
+                  onclick="copyFromUpload('add-r2-path')"
+                >
+                  从上传结果复制
+                </button>
+              </div>
+              <button type="submit">添加到 Collection</button>
+            </form>
+            <div
+              id="collection-add-response"
+              class="response"
+              style="display: none"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 存储上传和创建的结果，用于复制操作
+      let lastUploadResult = null;
+      let lastCollectionResult = null;
+
+      // 获取全局token
+      function getGlobalToken() {
+        return document.getElementById('global-token').value;
+      }
+
+      // 验证token
+      async function testToken() {
+        const token = getGlobalToken();
+        if (!token) {
+          showResponse(
+            'token-response',
+            { error: '请输入Authorization Token' },
+            true
+          );
+          return;
+        }
+
+        showResponse('token-response', null, false, true);
+
+        try {
+          const response = await fetch('/api/v1/health', {
+            headers: {
+              Authorization: token,
+            },
+          });
+          const data = await response.json();
+
+          if (response.ok) {
+            showResponse(
+              'token-response',
+              { message: 'Token验证成功', ...data },
+              false
+            );
+          } else {
+            showResponse('token-response', data, true);
+          }
+        } catch (error) {
+          showResponse('token-response', { error: error.message }, true);
+        }
+      }
+
+      // 通用的显示响应函数
+      function showResponse(
+        elementId,
+        data,
+        isError = false,
+        isLoading = false
+      ) {
+        const element = document.getElementById(elementId);
+        element.style.display = 'block';
+        element.className =
+          'response ' + (isLoading ? 'loading' : isError ? 'error' : 'success');
+
+        if (isLoading) {
+          element.innerHTML = '<p>正在处理请求...</p>';
+        } else {
+          const statusText = isError ? '❌ 请求失败' : '✅ 请求成功';
+          element.innerHTML = `
+                    <p><strong>${statusText}</strong></p>
+                    <pre>${JSON.stringify(data, null, 2)}</pre>
+                `;
+        }
+      }
+
+      // 复制上传结果中的路径
+      function copyFromUpload(targetInputId) {
+        if (lastUploadResult && lastUploadResult.r2Path) {
+          document.getElementById(targetInputId).value =
+            lastUploadResult.r2Path;
+        } else {
+          alert('请先上传一个图像文件！');
+        }
+      }
+
+      // 复制Collection创建结果中的ID
+      function copyFromCollection(targetInputId) {
+        if (
+          lastCollectionResult &&
+          lastCollectionResult.collection &&
+          lastCollectionResult.collection.id
+        ) {
+          document.getElementById(targetInputId).value =
+            lastCollectionResult.collection.id;
+        } else {
+          alert('请先创建一个Collection！');
+        }
+      } // 健康检查
+      async function testHealth() {
+        showResponse('health-response', null, false, true);
+        const token = getGlobalToken();
+
+        try {
+          const headers = {};
+          if (token) {
+            headers['Authorization'] = token;
+          }
+
+          const response = await fetch('/api/v1/health', { headers });
+          const data = await response.json();
+          showResponse('health-response', data, !response.ok);
+        } catch (error) {
+          showResponse('health-response', { error: error.message }, true);
+        }
+      } // 上传图像
+      document
+        .getElementById('upload-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
+          showResponse('upload-response', null, false, true);
+
+          const token = getGlobalToken();
+          if (!token) {
+            showResponse(
+              'upload-response',
+              { error: '请先设置Authorization Token' },
+              true
+            );
+            return;
+          }
+
+          const fileInput = document.getElementById('upload-file');
+          const fileName =
+            document.getElementById('upload-filename').value ||
+            fileInput.files[0]?.name ||
+            '';
+          const collectionId = document.getElementById(
+            'upload-collection-id'
+          ).value;
+          const collectionName = document.getElementById(
+            'upload-collection-name'
+          ).value;
+
+          if (!fileInput.files[0]) {
+            showResponse('upload-response', { error: '请选择一个文件' }, true);
+            return;
+          }
+
+          const formData = new FormData();
+          formData.append('imageFile', fileInput.files[0]);
+          formData.append('fileName', fileName);
+          if (collectionId) {
+            formData.append('collection_id', collectionId);
+          }
+          if (collectionName && !collectionId) {
+            formData.append('collection_name', collectionName);
+          }
+
+          try {
+            const response = await fetch('/api/v1/upload', {
+              method: 'POST',
+              headers: {
+                Authorization: token,
+              },
+              body: formData,
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+              showResponse('upload-response', data, true);
+            } else {
+              lastUploadResult = data; // 保存结果用于复制
+              showResponse('upload-response', data, false);
+            }
+          } catch (error) {
+            showResponse('upload-response', { error: error.message }, true);
+          }
+        }); // 处理图像
+      document
+        .getElementById('process-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
+          showResponse('process-response', null, false, true);
+
+          const r2SourcePath = document.getElementById('process-path').value;
+          const token = getGlobalToken();
+
+          if (!r2SourcePath) {
+            showResponse(
+              'process-response',
+              { error: 'R2 源路径不能为空' },
+              true
+            );
+            return;
+          }
+
+          if (!token) {
+            showResponse(
+              'process-response',
+              { error: '请先设置 Authorization Token' },
+              true
+            );
+            return;
+          }
+
+          try {
+            const response = await fetch('/api/v1/process', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: token,
+              },
+              body: JSON.stringify({ r2SourcePath }),
+            });
+            const data = await response.json();
+            showResponse('process-response', data, !response.ok);
+          } catch (error) {
+            showResponse('process-response', { error: error.message }, true);
+          }
+        }); // 生成标签
+      document
+        .getElementById('caption-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
+          showResponse('caption-response', null, false, true);
+
+          const r2SourcePath = document.getElementById('caption-path').value;
+          const token = getGlobalToken();
+          const model = document.getElementById('caption-model').value;
+          const prompt = document.getElementById('caption-prompt').value;
+
+          if (!r2SourcePath) {
+            showResponse(
+              'caption-response',
+              { error: 'R2 源路径不能为空' },
+              true
+            );
+            return;
+          }
+
+          if (!token) {
+            showResponse(
+              'caption-response',
+              { error: '请先设置 Authorization Token' },
+              true
+            );
+            return;
+          }
+
+          const requestBody = { r2SourcePath };
+          if (model) requestBody.model = model;
+          if (prompt) requestBody.prompt = prompt;
+
+          try {
+            const response = await fetch('/api/v1/caption', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: token,
+              },
+              body: JSON.stringify(requestBody),
+            });
+            const data = await response.json();
+            showResponse('caption-response', data, !response.ok);
+          } catch (error) {
+            showResponse('caption-response', { error: error.message }, true);
+          }
+        });
+
+      // 创建Collection
+      document
+        .getElementById('collection-create-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
+          showResponse('collection-create-response', null, false, true);
+
+          const name = document.getElementById('collection-name').value;
+          const description = document.getElementById(
+            'collection-description'
+          ).value;
+          const creatorId = document.getElementById('collection-creator').value;
+          const coverArtifactId =
+            document.getElementById('collection-cover').value;
+
+          if (!name) {
+            showResponse(
+              'collection-create-response',
+              { error: 'Collection 名称不能为空' },
+              true
+            );
+            return;
+          }
+          const requestBody = { name };
+          if (description) requestBody.description = description;
+          if (creatorId) requestBody.creator_id = creatorId;
+          if (coverArtifactId) requestBody.cover_artifact_id = coverArtifactId;
+
+          const token = getGlobalToken();
+          if (!token) {
+            showResponse(
+              'collection-create-response',
+              { error: '请先设置 Authorization Token' },
+              true
+            );
+            return;
+          }
+
+          try {
+            const response = await fetch('/api/v1/collection', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: token,
+              },
+              body: JSON.stringify(requestBody),
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+              showResponse('collection-create-response', data, true);
+            } else {
+              lastCollectionResult = data; // 保存结果用于复制
+              showResponse('collection-create-response', data, false);
+            }
+          } catch (error) {
+            showResponse(
+              'collection-create-response',
+              { error: error.message },
+              true
+            );
+          }
+        });
+
+      // 按ID添加图像到Collection
+      document
+        .getElementById('collection-add-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
+          showResponse('collection-add-response', null, false, true);
+
+          const collectionId =
+            document.getElementById('add-collection-id').value;
+          const r2SourcePath = document.getElementById('add-r2-path').value;
+          if (!collectionId || !r2SourcePath) {
+            showResponse(
+              'collection-add-response',
+              { error: 'Collection ID 和 R2 源路径不能为空' },
+              true
+            );
+            return;
+          }
+
+          const token = getGlobalToken();
+          if (!token) {
+            showResponse(
+              'collection-add-response',
+              { error: '请先设置 Authorization Token' },
+              true
+            );
+            return;
+          }
+
+          try {
+            const response = await fetch('/api/v1/collection/add-artifact', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: token,
+              },
+              body: JSON.stringify({
+                collection_id: collectionId,
+                r2SourcePath,
+              }),
+            });
+            const data = await response.json();
+            showResponse('collection-add-response', data, !response.ok);
+          } catch (error) {
+            showResponse(
+              'collection-add-response',
+              { error: error.message },
+              true
+            );
+          }
+        });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="https://oss.talesofai.cn/static/official/assets/asset.191b323b_Z1ocIPz.svg"
+    />
+    <title>图像处理与标记 API 文档</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+        background-color: #f4f4f4;
+        color: #333;
+      }
+      .container {
+        max-width: 800px;
+        margin: auto;
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      h1,
+      h2,
+      h3 {
+        color: #333;
+      }
+      h1 {
+        border-bottom: 2px solid #eee;
+        padding-bottom: 10px;
+      }
+      code {
+        color: black;
+        background: #72bed9;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'Courier New', Courier, monospace;
+      }
+      pre {
+        background-color: #72bed9; /* Changed background for better contrast with black text */
+        color: black; /* Changed text color to black for better readability */
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+      }
+      .endpoint {
+        margin-bottom: 30px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #eee;
+      }
+      .method {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 4px;
+        color: #fff;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+      .post {
+        background-color: #4caf50;
+      }
+      .get {
+        background-color: #2196f3;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background-color: #f2f2f2;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>图像处理与标记 API</h1>
+      <p>
+        欢迎使用图像处理与标记 API。该 API 提供以下主要端点：
+        <code>/api/v1/upload</code> 用于上传图像文件到 R2 存储并创建数据库记录，
+        <code>/api/v1/process</code>
+        用于处理已上传的图像（生成不同尺寸版本并更新数据库），
+        <code>/api/v1/caption</code> 用于为已存储在 R2 中的图像生成标签或描述，
+        <code>/api/v1/collection</code> 用于创建和管理图像集合。
+      </p>
+
+      <div class="endpoint">
+        <h2>
+          <span class="method post">POST</span> /api/v1/upload - 上传图像文件
+        </h2>
+        <p>
+          此端点用于上传图像文件到 R2 存储桶，并在数据库中创建对应的 artifact
+          记录。上传的文件会：
+        </p>
+        <ul>
+          <li>根据文件的 MD5 哈希生成唯一的存储路径。</li>
+          <li>自动解析图像的宽度、高度、格式、大小等元数据。</li>
+          <li>在数据库中创建 artifact 记录，包含所有图像信息。</li>
+          <li>可选地将 artifact 关联到指定的 collection。</li>
+          <li>返回上传结果和图像信息。</li>
+        </ul>
+        <p>
+          <strong>存储路径格式:</strong>
+          <code>original/{MD5前2位}/{MD5第3-4位}/{完整MD5}.{扩展名}</code>
+          <br />
+          例如：<code>original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png</code>
+        </p>
+
+        <h3>请求</h3>
+        <p><strong>请求体 (FormData):</strong></p>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+              <th>是否必须</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>imageFile</code></td>
+              <td>File</td>
+              <td>要上传的图像文件 (支持 PNG, JPG, GIF 等格式)。</td>
+              <td>是</td>
+            </tr>
+            <tr>
+              <td><code>fileName</code></td>
+              <td>String</td>
+              <td>文件的原始名称，用于记录到数据库中。</td>
+              <td>是</td>
+            </tr>
+            <tr>
+              <td><code>collection_id</code></td>
+              <td>String</td>
+              <td>
+                可选，要关联的 collection
+                ID。如果提供，上传的图像将自动添加到指定的 collection 中。
+              </td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>collection_name</code></td>
+              <td>String</td>
+              <td>
+                可选，要关联的 collection 名称。如果指定名称的 collection
+                不存在，将自动创建一个新的 collection
+                (描述由系统生成，creator_id 为 'system')。collection_id
+                优先级高于 collection_name。
+              </td>
+              <td>否</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>成功响应 (200 OK)</h3>
+        <p><strong>响应体 (JSON):</strong></p>
+        <pre><code>{
+  "success": true,
+  "r2Path": "original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png",
+  "artifactId": "550e8400-e29b-41d4-a716-446655440000",
+  "imageInfo": {
+    "width": 1920,
+    "height": 1080,
+    "format": "png",
+    "size": 2048576,
+    "pixels": 2073600
+  },
+  "message": "File uploaded successfully"
+}</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>success</code></td>
+              <td>Boolean</td>
+              <td>指示操作是否成功。</td>
+            </tr>
+            <tr>
+              <td><code>r2Path</code></td>
+              <td>String</td>
+              <td>文件在 R2 存储中的完整路径。</td>
+            </tr>
+            <tr>
+              <td><code>artifactId</code></td>
+              <td>String</td>
+              <td>在数据库中创建的 artifact 记录的唯一 ID。</td>
+            </tr>
+            <tr>
+              <td><code>imageInfo</code></td>
+              <td>Object</td>
+              <td>包含图像的详细信息（宽高、格式、大小、像素数）。</td>
+            </tr>
+            <tr>
+              <td><code>message</code></td>
+              <td>String</td>
+              <td>成功消息。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>错误响应</h3>
+        <ul>
+          <li>
+            <strong>400 Bad Request:</strong> 如果缺少必要的字段。
+            <pre><code>{ "error": "imageFile is required in FormData" }</code></pre>
+            <pre><code>{ "error": "fileName is required and must be a non-empty string" }</code></pre>
+            <pre><code>{ "error": "Invalid image file or unable to read image metadata." }</code></pre>
+          </li>
+          <li>
+            <strong>500 Internal Server Error:</strong> 如果上传过程中发生错误。
+            <pre><code>{
+  "error": "Failed to upload file: specific error message"
+}</code></pre>
+          </li>
+        </ul>
+      </div>
+
+      <div class="endpoint">
+        <h2>
+          <span class="method post">POST</span> /api/v1/process -
+          处理已上传的图像
+        </h2>
+        <p>
+          此端点接收一个指向 R2 存储中图像的路径
+          (<code>r2SourcePath</code>)，然后执行以下操作：
+        </p>
+        <ol>
+          <li>从 R2 下载指定的原始图像文件。</li>
+          <li>
+            使用
+            <a href="https://photon.atou.workers.dev/" target="_blank"
+              >photon.atou.workers.dev</a
+            >
+            图像处理服务将原始图像调整为三个预设尺寸：
+            <ul>
+              <li>256px 短边</li>
+              <li>1024px 短边</li>
+              <li>2048px 短边</li>
+            </ul>
+            所有调整后的图像都转换为 WebP 格式以优化存储和传输。
+          </li>
+          <li>将所有调整大小后的 WebP 图像上传到 R2 存储桶。</li>
+          <li>
+            在数据库中查找对应的 artifact 记录（根据
+            <code>r2SourcePath</code>），并更新以下字段：
+            <ul>
+              <li><code>is_resized: true</code> - 标记图像已完成处理</li>
+              <li><code>size_256x_path</code> - 256px 版本的存储路径</li>
+              <li><code>size_1024x_path</code> - 1024px 版本的存储路径</li>
+              <li><code>size_2048x_path</code> - 2048px 版本的存储路径</li>
+              <li><code>update_time</code> - 更新处理完成时间</li>
+            </ul>
+          </li>
+        </ol>
+        <p>
+          <strong>前置条件:</strong> 图像必须已经通过
+          <code>/api/v1/upload</code> 端点上传，并在数据库中存在对应的 artifact
+          记录。
+        </p>
+        <p>
+          <strong>原子性保证:</strong>
+          此操作具有原子性 -
+          所有图像尺寸调整必须成功，然后所有调整后的图像上传必须成功，最后数据库更新必须成功。如果任何步骤失败，整个操作将中止并返回错误。
+        </p>
+        <h3>请求</h3>
+        <p><strong>请求体 (JSON):</strong></p>
+        <pre><code>{
+  "r2SourcePath": "original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
+}</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+              <th>是否必须</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>r2SourcePath</code></td>
+              <td>String</td>
+              <td>
+                图像在 R2 存储桶中的完整路径，通常来自
+                <code>/api/v1/upload</code> 的响应。
+              </td>
+              <td>是</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>成功响应 (200 OK)</h3>
+        <p><strong>响应体 (JSON):</strong></p>
+        <pre><code>{
+  "success": true,
+  "originpath": "original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png",
+  "url": "https://your-r2-domain.com/original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
+}</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>success</code></td>
+              <td>Boolean</td>
+              <td>指示操作是否成功。</td>
+            </tr>
+            <tr>
+              <td><code>originpath</code></td>
+              <td>String</td>
+              <td>R2 中原始图像的对象键。</td>
+            </tr>
+            <tr>
+              <td><code>url</code></td>
+              <td>String</td>
+              <td>R2 中原始图像的完整 URL。</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          <strong>注意:</strong> 调整大小后的图像使用以下命名规则存储在 R2 中：
+        </p>
+        <ul>
+          <li>
+            原始路径：<code
+              >original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png</code
+            >
+          </li>
+          <li>
+            256px 版本：<code
+              >02/00/02000e6b9c70a21cfc590ce3d936ec8c_256.webp</code
+            >
+          </li>
+          <li>
+            1024px 版本：<code
+              >02/00/02000e6b9c70a21cfc590ce3d936ec8c_1024.webp</code
+            >
+          </li>
+          <li>
+            2048px 版本：<code
+              >02/00/02000e6b9c70a21cfc590ce3d936ec8c_2048.webp</code
+            >
+          </li>
+        </ul>
+        <p>
+          数据库中对应的 artifact 记录会被更新为 <code>is_resized: true</code>，
+          并在相应字段中存储这些路径（不包含域名前缀）。
+        </p>
+
+        <h3>错误响应</h3>
+        <ul>
+          <li>
+            <strong>400 Bad Request:</strong> 如果请求体中未提供
+            <code>r2SourcePath</code>。
+            <pre><code>{ "error": "r2SourcePath is required" }</code></pre>
+          </li>
+          <li>
+            <strong>404 Not Found:</strong> 如果在 R2
+            存储中找不到指定的图像文件。
+            <pre><code>{ "error": "Failed to fetch image: Not Found" }</code></pre>
+          </li>
+          <li>
+            <strong>500 Internal Server Error:</strong>
+            如果处理过程中发生任何错误：
+            <ul>
+              <li>图像调整大小失败</li>
+              <li>上传调整后的图像失败</li>
+              <li>在数据库中找不到对应的 artifact 记录</li>
+              <li>数据库更新失败</li>
+            </ul>
+            <pre><code>{
+  "error": "Internal server error",
+  "details": "Failed to resize one or more images: specific error message"
+}</code></pre>
+            <pre><code>{
+  "error": "Internal server error", 
+  "details": "Artifact not found for the given path"
+}</code></pre>
+            <pre><code>{
+  "error": "Internal server error",
+  "details": "Failed to update artifact record"
+}</code></pre>
+          </li>
+        </ul>
+      </div>
+
+      <div class="endpoint">
+        <h2>
+          <span class="method post">POST</span> /api/v1/caption - 为 R2
+          中的图像生成标签/描述
+        </h2>
+        <p>
+          此端点接收一个指向 R2 存储中图像的路径
+          (<code>r2SourcePath</code>)，然后使用 Google Gemini API
+          为该图像生成标签或描述，并将结果保存到数据库中。
+        </p>
+        <ul>
+          <li>从 R2 下载指定的原始图像。</li>
+          <li>将图像转换为 Base64 编码。</li>
+          <li>调用 Google Gemini API (可指定模型和提示)。</li>
+          <li>默认情况下，API 会请求一个逗号分隔的标签列表。</li>
+          <li>将生成的caption保存到数据库的captions表中。</li>
+          <li>创建artifact和caption之间的关联记录。</li>
+        </ul>
+        <h3>请求</h3>
+        <p><strong>请求头:</strong></p>
+        <pre><code>Authorization: Bearer YOUR_ACCESS_TOKEN</code></pre>
+        <p><strong>请求体 (JSON):</strong></p>
+        <pre><code>{
+  "r2SourcePath": "path/to/your/image_in_r2.jpg",
+  "model": "gemini-2.5-pro-preview-05-06", // 可选
+  "prompt": "Generate a list of relevant tags for this image. Provide them as a comma-separated list." // 可选
+}</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+              <th>是否必须</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>r2SourcePath</code></td>
+              <td>String</td>
+              <td>
+                图像在 R2
+                存储桶中的完整路径。支持原始图像路径或经过处理的图像路径（如256x、1024x、2048x版本）。系统会自动查找对应的artifact记录。
+              </td>
+              <td>是</td>
+            </tr>
+            <tr>
+              <td><code>model</code></td>
+              <td>String</td>
+              <td>
+                可选，指定使用的 Gemini 模型。默认为
+                <code>gemini-2.5-pro-preview-05-06</code>。
+                <a
+                  href="https://ai.google.dev/gemini-api/docs/models?hl=zh-cn#model-variations"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >查看可用模型</a
+                >
+              </td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>prompt</code></td>
+              <td>String</td>
+              <td>
+                可选，提供给 Gemini API 的提示语。默认为
+                <code
+                  >Generate a list of relevant tags for this image. Provide them
+                  as a comma-separated list.</code
+                >
+              </td>
+              <td>否</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>成功响应 (200 OK)</h3>
+        <p><strong>响应体 (JSON):</strong></p>
+        <pre><code>{
+  "success": true,
+  "caption": "sunset, mountains, landscape, orange sky, nature",
+  "model_id": "gemini-2.5-pro-preview-05-06",
+  "imagepath": "path/to/your/image_in_r2.jpg",
+  "caption_id": "550e8400-e29b-41d4-a716-446655440000",
+  "artifact_id": "660e8400-e29b-41d4-a716-446655440001",
+  "saved_to_database": true
+}</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>success</code></td>
+              <td>Boolean</td>
+              <td>指示操作是否成功。</td>
+            </tr>
+            <tr>
+              <td><code>caption</code></td>
+              <td>String</td>
+              <td>由 Gemini API 生成的图像描述或标签文本。</td>
+            </tr>
+            <tr>
+              <td><code>model_id</code></td>
+              <td>String</td>
+              <td>使用的 Gemini 模型名称。</td>
+            </tr>
+            <tr>
+              <td><code>imagepath</code></td>
+              <td>String</td>
+              <td>处理的图像路径。</td>
+            </tr>
+            <tr>
+              <td><code>caption_id</code></td>
+              <td>String</td>
+              <td>在数据库中保存的caption记录的唯一ID（如果保存成功）。</td>
+            </tr>
+            <tr>
+              <td><code>artifact_id</code></td>
+              <td>String</td>
+              <td>关联的artifact记录的唯一ID（如果找到对应的artifact）。</td>
+            </tr>
+            <tr>
+              <td><code>saved_to_database</code></td>
+              <td>Boolean</td>
+              <td>指示caption是否成功保存到数据库。</td>
+            </tr>
+            <tr>
+              <td><code>warning</code></td>
+              <td>String</td>
+              <td>可选字段，在caption生成成功但数据库操作失败时出现。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>错误响应</h3>
+        <ul>
+          <li>
+            <strong>400 Bad Request:</strong> 如果请求体中未提供
+            <code>r2SourcePath</code>。
+            <pre><code>{ "error": "r2SourcePath is required" }</code></pre>
+          </li>
+          <li>
+            <strong>401 Unauthorized:</strong> 如果 Authorization header
+            无效或缺失。
+            <pre><code>{ "error": "Unauthorized" }</code></pre>
+          </li>
+          <li>
+            <strong>500 Internal Server Error:</strong>
+            如果处理过程中发生任何错误 (例如，无法从 R2 获取图像、Gemini API
+            调用失败等)。响应体中通常会包含
+            <code>error</code> 和 <code>details</code> 字段。
+            <pre><code>{
+  "error": "Internal server error",
+  "details": "Specific error message here"
+}</code></pre>
+          </li>
+          <li>
+            <strong>XXX (Gemini API Error Status):</strong> 如果 Gemini API
+            返回错误。
+            <pre><code>{
+  "error": "Gemini API request failed: [Status Text]",
+  "details": "[Gemini Error Body]"
+}</code></pre>
+          </li>
+        </ul>
+      </div>
+      <div class="endpoint">
+        <h2>
+          <span class="method post">POST</span> /api/v1/collection -
+          创建和管理图像集合
+        </h2>
+        <p>
+          此端点提供 collection（集合）功能，用于组织和管理图像。Collection
+          是一组相关图像的逻辑分组， 可以用于分类、项目管理或其他组织目的。
+        </p>
+
+        <h3>创建新的 Collection</h3>
+        <p><strong>请求路径：</strong> <code>POST /api/v1/collection</code></p>
+        <p><strong>请求体 (JSON):</strong></p>
+        <pre><code>{
+  "name": "我的图像集合",
+  "description": "用于存储项目相关图像",
+  "creator_id": "550e8400-e29b-41d4-a716-446655440000",
+  "cover_artifact_id": "artifact-uuid-here"
+}</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+              <th>是否必须</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>name</code></td>
+              <td>String</td>
+              <td>集合的名称，不能为空。</td>
+              <td>是</td>
+            </tr>
+            <tr>
+              <td><code>description</code></td>
+              <td>String</td>
+              <td>集合的描述信息。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>creator_id</code></td>
+              <td>String</td>
+              <td>创建者的用户 ID。</td>
+              <td>否</td>
+            </tr>
+            <tr>
+              <td><code>cover_artifact_id</code></td>
+              <td>String</td>
+              <td>用作集合封面的 artifact ID。</td>
+              <td>否</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>成功响应 (200 OK)</h3>
+        <pre><code>{
+  "success": true,
+  "collection": {
+    "id": "generated-uuid",
+    "name": "我的图像集合",
+    "description": "用于存储项目相关图像",
+    "create_time": 1672531200000,
+    "creator_id": "550e8400-e29b-41d4-a716-446655440000",
+    "cover_artifact_id": "artifact-uuid-here"
+  },
+  "message": "Collection created successfully"
+}</code></pre>
+        <h3>将图像添加到 Collection (通过 Collection ID)</h3>
+        <p>
+          <strong>请求路径：</strong>
+          <code>POST /api/v1/collection/add-artifact</code>
+        </p>
+        <p><strong>请求体 (JSON):</strong></p>
+        <pre><code>{
+  "collection_id": "collection-uuid-here",
+  "r2SourcePath": "original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
+}</code></pre>
+        <table>
+          <thead>
+            <tr>
+              <th>字段</th>
+              <th>类型</th>
+              <th>描述</th>
+              <th>是否必须</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>collection_id</code></td>
+              <td>String</td>
+              <td>目标集合的 ID。</td>
+              <td>是</td>
+            </tr>
+            <tr>
+              <td><code>r2SourcePath</code></td>
+              <td>String</td>
+              <td>要添加到集合的图像在 R2 中的路径。</td>
+              <td>是</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>成功响应 (200 OK)</h3>
+        <pre><code>{
+  "success": true,
+  "mapping": {
+    "artifact_id": "artifact-uuid",
+    "collection_id": "collection-uuid",
+    "add_time": 1672531200000
+  },
+  "message": "Artifact added to collection successfully"
+}</code></pre>
+        <h3>错误响应</h3>
+        <ul>
+          <li>
+            <strong>400 Bad Request:</strong> 如果缺少必要的字段。
+            <pre><code>{ "error": "name is required and must be a non-empty string" }</code></pre>
+            <pre><code>{ "error": "collection_id is required" }</code></pre>
+            <pre><code>{ "error": "r2SourcePath is required" }</code></pre>
+            <pre><code>{ "error": "collection_name is required and must be a non-empty string" }</code></pre>
+          </li>
+          <li>
+            <strong>404 Not Found:</strong> 如果集合或图像不存在。
+            <pre><code>{ "error": "Collection not found" }</code></pre>
+            <pre><code>{ "error": "Artifact not found for the given path" }</code></pre>
+          </li>
+          <li>
+            <strong>500 Internal Server Error:</strong> 如果数据库操作失败。
+            <pre><code>{
+  "error": "Failed to create collection",
+  "details": "Database operation failed"
+}</code></pre>
+            <pre><code>{
+  "error": "Failed to add artifact to collection",
+  "details": "Database operation failed"
+}</code></pre>
+          </li>
+        </ul>
+      </div>
+
+      <div class="endpoint">
+        <h2><span class="method get">GET</span> /api/v1/health - 健康检查</h2>
+        <p>此端点用于检查 API 服务的健康状态。</p>
+        <h3>成功响应 (200 OK)</h3>
+        <pre><code>{
+  "status": "ok",
+  "timestamp": "YYYY-MM-DDTHH:mm:ss.sssZ"
+}</code></pre>
+      </div>
+
+      <p style="text-align: center; margin-top: 30px; color: #777">
+        API 文档 - 最后更新于 2025年6月4日
+      </p>
+    </div>
+  </body>
+</html>

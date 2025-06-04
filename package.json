@@ -1,0 +1,21 @@
+{
+	"name": "imgprocess",
+	"scripts": {
+		"dev": "wrangler dev",
+		"deploy": "wrangler deploy --minify",
+		"cf-typegen": "wrangler types --env-interface CloudflareBindings"
+	},
+	"dependencies": {
+		"dotenv": "^16.5.0",
+		"hono": "^4.7.10",
+		"image-size": "^2.0.2",
+		"openapi-fetch": "^0.14.0"
+	},
+	"devDependencies": {
+		"@cloudflare/workers-types": "^4.20250523.0",
+		"openapi-typescript": "^7.8.0",
+		"tsx": "^4.19.4",
+		"typescript": "^5.8.3",
+		"wrangler": "^4.16.1"
+	}
+}
