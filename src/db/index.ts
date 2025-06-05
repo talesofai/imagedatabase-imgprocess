@@ -227,34 +227,3 @@ export async function createArtifactCollectionMap(
 
   return body;
 }
-
-export async function findArtifactByMd5(
-  c: Env,
-  md5: string
-): Promise<components['schemas']['artifacts'] | null> {
-  const client = initClient(c);
-  const { data, error } = await client.GET('/artifacts', {
-    headers: {
-      Authorization: `Bearer ${c.PGREST_TOKEN}`,
-    },
-    params: {
-      query: {
-        md5: `eq.${md5}`,
-        limit: '1',
-      },
-    },
-  });
-
-  if (error) {
-    console.error('Error finding artifact by MD5:', error);
-    return null;
-  }
-  if (!data || data.length === 0) {
-    return null;
-  }
-  const artifactsArray = data as components['schemas']['artifacts'][];
-  if (!artifactsArray || artifactsArray.length === 0) {
-    return null;
-  }
-  return artifactsArray[0] || null;
-}

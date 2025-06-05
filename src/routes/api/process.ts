@@ -136,4 +136,121 @@ app.post('/', async (c) => {
   }
 });
 
+app.post('/:shortSize', async (c) => {
+  try {
+    const shortSize = c.req.param('shortSize');
+    const body = await c.req.json<RequestBody>();
+    const imageUrl = `https://${c.env.R2_DOMAIN}/${body.r2SourcePath}`;
+
+    // 验证短边尺寸参数
+    const validSizes = ['256', '1024', '2048'];
+    if (!validSizes.includes(shortSize)) {
+      return c.json(
+        {
+          error: `Invalid shortSize. Must be one of: ${validSizes.join(', ')}`,
+        },
+        400
+      );
+    }
+
+    if (!imageUrl) {
+      return c.json({ error: 'r2SourcePath is required' }, 400);
+    }
+
+    // 1. 获取图片
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      return c.json(
+        {
+          error: `Failed to fetch image: ${imageResponse.statusText}`,
+        },
+        imageResponse.status as any
+      );
+    }
+
+    const imageMimeType =
+      imageResponse.headers.get('content-type') || 'image/jpeg';
+    const r2path = body.r2SourcePath;
+    let extension = imageMimeType.split('/')[1];
+    if (extension === 'jpeg') {
+      extension = 'jpg';
+    }
+    const originalImageObjectKey = r2path.split('.')[0] || r2path;
+    const file_name = originalImageObjectKey.split('/').slice(1).join('/');
+
+    // 2. 调整指定尺寸的图片
+    let imgBuffer;
+    try {
+      imgBuffer = await getResize(imageUrl, shortSize);
+    } catch (resizeError) {
+      console.error('Error during image resizing:', resizeError);
+      throw new Error(
+        `Failed to resize image to ${shortSize}: ${
+          resizeError instanceof Error ? resizeError.message : resizeError
+        }`
+      );
+    }
+
+    // 3. 上传调整大小后的图片
+    let uploadedImagePath: string;
+    try {
+      uploadedImagePath = await uploadImageToR2(
+        c.env,
+        Promise.resolve(imgBuffer),
+        file_name,
+        'webp',
+        shortSize
+      );
+
+      // 查找并更新 artifact 记录
+      const artifact = await findArtifactByPath(c.env, r2path);
+      if (!artifact) {
+        console.error('Artifact not found for path:', r2path);
+        throw new Error('Artifact not found for the given path');
+      }
+
+      // 构建更新对象，只更新指定尺寸的路径
+      const pathOnly = uploadedImagePath.replace(
+        `https://${c.env.R2_DOMAIN}/`,
+        ''
+      );
+      const updates = {
+        [`size_${shortSize}x_path`]: pathOnly,
+        update_time: new Date().getTime(),
+      };
+
+      const updateSuccess = await updateArtifact(c.env, artifact.id, updates);
+      if (!updateSuccess) {
+        throw new Error('Failed to update artifact record');
+      }
+    } catch (uploadError) {
+      console.error('Error during upload:', uploadError);
+      throw new Error(
+        `Failed to upload resized image: ${
+          uploadError instanceof Error ? uploadError.message : uploadError
+        }`
+      );
+    }
+
+    return c.json(
+      {
+        success: true,
+        originpath: r2path,
+        shortSize: shortSize,
+        url: `https://${c.env.R2_DOMAIN}/${r2path}`,
+        processedImage: uploadedImagePath,
+      },
+      200
+    );
+  } catch (error) {
+    console.error('Error processing single size image:', error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'An unknown error occurred';
+    return c.json(
+      { error: 'Internal server error', details: errorMessage },
+      500
+    );
+  }
+});
+
 export default app;

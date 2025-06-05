@@ -41,7 +41,6 @@ app.post('/', async (c) => {
       );
     }
 
-    // Construct a unique object key
     // original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png
     const fileBuffer = await file.arrayBuffer();
     const file_md5_hash = await md5(fileBuffer);

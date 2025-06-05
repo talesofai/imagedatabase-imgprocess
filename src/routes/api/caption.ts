@@ -22,6 +22,7 @@ interface CaptionRequestBody {
   model?: string; // Optional, defaults to 'gemini-2.5-pro-preview-05-06'
   prompt?: string; // Optional, defaults to 'Generate a concise, descriptive caption for this image.'
   presetkey?: string; // Optional, defaults to 'gemini_english_description'
+  tempreture?: number; // Optional, defaults to 0.7
 }
 
 interface GeminiCandidate {
@@ -44,7 +45,14 @@ app.post('/', async (c) => {
     if (!body.r2SourcePath) {
       return c.json({ error: 'r2SourcePath is required' }, 400);
     }
+
+    const geminiModel = body.model || 'gemini-2.5-pro-preview-05-06';
+    const geminiPrompt =
+      body.prompt ||
+      'Generate a list of relevant tags for this image. Provide them as a comma-separated list.'; // Changed default prompt
     const presetkey = body.presetkey || 'gemini_english_description';
+    const temperature = body.tempreture || 0.7;
+
     // 1. Fetch the image
     const imageResponse = await fetch(imageUrl);
     if (!imageResponse.ok) {
@@ -67,10 +75,6 @@ app.post('/', async (c) => {
     }
 
     // 4. Prepare request for Gemini API
-    const geminiModel = body.model || 'gemini-2.5-pro-preview-05-06';
-    const geminiPrompt =
-      body.prompt ||
-      'Generate a list of relevant tags for this image. Provide them as a comma-separated list.'; // Changed default prompt
     const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
 
     const geminiPayload = {
@@ -85,6 +89,9 @@ app.post('/', async (c) => {
               },
             },
           ],
+          generationConfig: {
+            temperature: temperature,
+          },
         },
       ],
     };
@@ -138,7 +145,7 @@ app.post('/', async (c) => {
           {
             success: true,
             caption: captionText,
-            model_id: presetkey,
+            model_id: geminiModel,
             imagepath: body.r2SourcePath,
             warning:
               'Caption generated but not saved to database - artifact not found',
@@ -153,6 +160,7 @@ app.post('/', async (c) => {
       const extra_data = {
         model: geminiModel,
         prompt: geminiPrompt,
+        temperature: temperature,
         image_path: body.r2SourcePath,
       };
       const captionRecord = {
