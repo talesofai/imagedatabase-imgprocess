@@ -1,7 +1,6 @@
 // index.ts
 import { Hono } from 'hono';
 import api from './api';
-import artifacts from './artifacts'; // Import the artifacts route
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', async (c, next) => {
@@ -15,6 +14,5 @@ app.use('*', async (c, next) => {
 
 // 😃
 app.route('/api', api);
-app.route('/artifacts', artifacts); // Add the artifacts route
 
 export default app;

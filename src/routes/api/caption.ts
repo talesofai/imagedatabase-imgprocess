@@ -3,6 +3,9 @@ import {
   createCaption,
   createArtifactCaptionMap,
   findArtifactByPath,
+  findArtifactById,
+  findArtifactCaptionMap,
+  findCaptionById,
 } from '../../db/index';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -34,6 +37,66 @@ interface GeminiCandidate {
 interface GeminiResponse {
   candidates?: GeminiCandidate[];
 }
+
+app.get('/', async (c) => {
+  const image_id = c.req.query('image_id');
+  const r2SourcePath = c.req.query('r2SourcePath');
+  if (!image_id && !r2SourcePath) {
+    return c.json({ error: 'image_id or r2SourcePath is required' }, 400);
+  }
+  if (image_id && r2SourcePath) {
+    return c.json(
+      { error: 'Only one of image_id or r2SourcePath should be provided' },
+      400
+    );
+  }
+  let artifact;
+  if (image_id) {
+    artifact = await findArtifactById(c.env, image_id);
+    if (!artifact) {
+      return c.json({ error: 'Artifact not found' }, 404);
+    }
+  }
+  if (r2SourcePath) {
+    artifact = await findArtifactByPath(c.env, r2SourcePath);
+    if (!artifact) {
+      return c.json({ error: 'Artifact not found' }, 404);
+    }
+  }
+  if (!artifact) {
+    return c.json({ error: 'Artifact not found' }, 404);
+  }
+  const artifact_caption_maps = await findArtifactCaptionMap(
+    c.env,
+    artifact.id
+  );
+  if (!artifact_caption_maps) {
+    return c.json({ error: 'No captions found for this artifact' }, 404);
+  }
+  const captions = await Promise.all(
+    artifact_caption_maps.map(async (map) => {
+      const caption = await findCaptionById(c.env, map.caption_id);
+      if (!caption) {
+        return null; // Skip if caption not found
+      }
+      return caption;
+    })
+  );
+  return c.json(
+    {
+      success: true,
+      artifact: {
+        id: artifact.id,
+        original_path: artifact.original_path,
+        image_url: `https://${c.env.R2_DOMAIN}/${artifact.original_path}`,
+        created_at: artifact.created_time,
+        updated_at: artifact.update_time,
+      },
+      captions: captions.filter((c) => c !== null),
+    },
+    200
+  );
+});
 
 app.post('/', async (c) => {
   try {
@@ -89,11 +152,11 @@ app.post('/', async (c) => {
               },
             },
           ],
-          generationConfig: {
-            temperature: temperature,
-          },
         },
       ],
+      generationConfig: {
+        temperature: temperature,
+      },
     };
     // 5. Call Gemini API
     const geminiApiResponse = await fetch(geminiApiUrl, {

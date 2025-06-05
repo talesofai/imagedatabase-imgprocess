@@ -23,7 +23,35 @@ export async function createArtifact(
 
   return body;
 }
+export async function findArtifactById(
+  c: Env,
+  id: string
+): Promise<components['schemas']['artifacts'] | null> {
+  const client = initClient(c);
+  const { data, error } = await client.GET('/artifacts', {
+    headers: {
+      Authorization: `Bearer ${c.PGREST_TOKEN}`,
+    },
+    params: {
+      query: {
+        id: `eq.${id}`,
+        limit: '1',
+      },
+    },
+  });
 
+  if (error) {
+    console.error('Error finding artifact:', error);
+    return null;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  const artifactsArray = data as components['schemas']['artifacts'][];
+  return artifactsArray[0] || null;
+}
 export async function findArtifactByPath(
   c: Env,
   originalPath: string
@@ -54,6 +82,36 @@ export async function findArtifactByPath(
   }
 
   return artifactsArray[0] || null;
+}
+
+export async function findArtifactCaptionMap(
+  c: Env,
+  artifactId: string
+): Promise<components['schemas']['artifact_caption_map'][] | null> {
+  const client = initClient(c);
+  const { data, error } = await client.GET('/artifact_caption_map', {
+    headers: {
+      Authorization: `Bearer ${c.PGREST_TOKEN}`,
+    },
+    params: {
+      query: {
+        artifact_id: `eq.${artifactId}`,
+      },
+    },
+  });
+
+  if (error) {
+    console.error('Error finding artifact_caption_map:', error);
+    return null;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  const artifactCaptionMapArray =
+    data as components['schemas']['artifact_caption_map'][];
+  return artifactCaptionMapArray;
 }
 
 export async function updateArtifact(
@@ -100,6 +158,36 @@ export async function createCaption(
   }
 
   return body;
+}
+
+export async function findCaptionById(
+  c: Env,
+  id: string
+): Promise<components['schemas']['captions'] | null> {
+  const client = initClient(c);
+  const { data, error } = await client.GET('/captions', {
+    headers: {
+      Authorization: `Bearer ${c.PGREST_TOKEN}`,
+    },
+    params: {
+      query: {
+        id: `eq.${id}`,
+        limit: '1',
+      },
+    },
+  });
+
+  if (error) {
+    console.error('Error finding caption:', error);
+    return null;
+  }
+
+  if (!data || data.length === 0) {
+    return null;
+  }
+
+  const captionsArray = data as components['schemas']['captions'][];
+  return captionsArray[0] || null;
 }
 
 export async function createArtifactCaptionMap(
