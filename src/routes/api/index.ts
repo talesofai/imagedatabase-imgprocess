@@ -5,7 +5,15 @@ import caption from './caption';
 import upload from './upload';
 import collection from './collection';
 
-const app = new Hono();
+const app = new Hono<{ Bindings: Env }>();
+app.use('*', async (c, next) => {
+  const authHeader = c.req.header('Authorization');
+  const token = authHeader?.replace(/^Bearer\s/, '');
+  if (!token || token !== c.env.TOKEN) {
+    return c.json({ error: 'Unauthorized: Invalid or missing token' }, 401);
+  }
+  await next();
+});
 
 app.route('/v1/process', process);
 app.route('/v1/health', health);
