@@ -75,9 +75,18 @@ app.get('/images', async (c) => {
   // 对筛选后的列表进行分页
   const paginatedImageItems = userSpecificImages.slice(startIndex, endIndex);
 
+  // 使用 Promise.all 并行处理 artifact 查询
+  const artifactPromises = paginatedImageItems.map((item) =>
+    findArtifactById(c.env, item.image_id).then((artifact) => ({
+      item,
+      artifact,
+    }))
+  );
+
+  const results = await Promise.all(artifactPromises);
+
   const processedImages: { id: string; url: string; alt: string }[] = [];
-  for (const item of paginatedImageItems) {
-    const artifact = await findArtifactById(c.env, item.image_id);
+  for (const { item, artifact } of results) {
     if (artifact && (artifact as any).original_path) {
       const imageUrl = `https://${c.env.R2_DOMAIN}/${
         (artifact as any).original_path
@@ -112,6 +121,11 @@ app.get('/', async (c) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="https://oss.talesofai.cn/static/official/assets/asset.191b323b_Z1ocIPz.svg"
+    />
     <title>用户画廊</title>
     <style>
         body { 

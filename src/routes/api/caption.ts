@@ -21,7 +21,9 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 interface CaptionRequestBody {
-  r2SourcePath: string;
+  r2SourcePath?: string;
+  image_id?: string;
+  size?: string; // Optional, defaults to '1024'
   model?: string; // Optional, defaults to 'gemini-2.5-pro-preview-05-06'
   prompt?: string; // Optional, defaults to 'Generate a concise, descriptive caption for this image.'
   presetkey?: string; // Optional, defaults to 'gemini_english_description'
@@ -101,8 +103,40 @@ app.get('/', async (c) => {
 app.post('/', async (c) => {
   try {
     const body = await c.req.json<CaptionRequestBody>();
+    let artifactToSave: Awaited<ReturnType<typeof findArtifactById>> | null =
+      null; // Variable to store artifact if fetched by ID
     // Assuming CaptionRequestBody does not strictly require 'token' or it's handled if present
-
+    if (!body.r2SourcePath && !body.image_id) {
+      return c.json(
+        { error: 'Either r2SourcePath or image_id is required' },
+        400
+      );
+    }
+    if (body.image_id && body.r2SourcePath) {
+      return c.json(
+        { error: 'Only one of r2SourcePath or image_id should be provided' },
+        400
+      );
+    }
+    // If r2SourcePath is provided, use it directly
+    if (body.image_id) {
+      const artifact = await findArtifactById(c.env, body.image_id);
+      if (!artifact) {
+        return c.json({ error: 'Artifact not found' }, 404);
+      }
+      artifactToSave = artifact;
+      if (body.size && ['1024x', '256x', '2048x'].includes(body.size)) {
+        body.r2SourcePath =
+          artifact[
+            `size_${body.size}_path` as
+              | 'size_1024x_path'
+              | 'size_256x_path'
+              | 'size_2048x_path'
+          ] || artifact.original_path;
+      } else {
+        body.r2SourcePath = artifact.original_path;
+      }
+    }
     const imageUrl = `https://${c.env.R2_DOMAIN}/${body.r2SourcePath}`;
 
     if (!body.r2SourcePath) {
@@ -199,7 +233,11 @@ app.post('/', async (c) => {
     // 7. Save caption to database
     try {
       // Find the artifact by original_path
-      const artifact = await findArtifactByPath(c.env, body.r2SourcePath);
+      let artifact = artifactToSave; // Use the stored artifact if available
+      if (!artifact) {
+        // If not fetched by ID, fetch by path
+        artifact = await findArtifactByPath(c.env, body.r2SourcePath!);
+      }
 
       if (!artifact) {
         console.warn(`Artifact not found for path: ${body.r2SourcePath}`);
