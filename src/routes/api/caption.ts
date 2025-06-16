@@ -159,8 +159,14 @@ app.post('/', async (c) => {
       );
     }
     const imageArrayBuffer = await imageResponse.arrayBuffer();
-    const imageMimeType =
+    let imageMimeType =
       imageResponse.headers.get('content-type') || 'image/jpeg';
+    // 出现其他Mimetype 会报错 比如application/octet-stream
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+
+    if (imageMimeType && !allowedMimeTypes.includes(imageMimeType)) {
+      imageMimeType = 'image/jpeg';
+    }
 
     // 2. Convert image to base64 for Gemini
     const imageBase64 = arrayBufferToBase64(imageArrayBuffer);
