@@ -80,8 +80,42 @@ app.get('/', async (c) => {
       const caption = await findCaptionById(c.env, map.caption_id);
       if (!caption) {
         return null; // Skip if caption not found
+      } // Try to parse value_text as JSON if it looks like JSON or Markdown JSON block
+      let parsedValueText = caption.value_text;
+      if (caption.value_text) {
+        const trimmedText = caption.value_text.trim();
+        let jsonText: string | null = trimmedText;
+
+        // Check if it's a Markdown JSON block
+        if (trimmedText.startsWith('```json') && trimmedText.endsWith('```')) {
+          // Extract JSON from Markdown block
+          jsonText = trimmedText.slice(7, -3).trim(); // Remove ```json and ```
+        } else if (trimmedText.startsWith('{')) {
+          // Direct JSON
+          jsonText = trimmedText;
+        } else {
+          // Not JSON, keep original
+          jsonText = null;
+        }
+
+        if (jsonText) {
+          try {
+            parsedValueText = JSON.parse(jsonText);
+          } catch (error) {
+            // If parsing fails, keep the original text
+            console.warn(
+              `Failed to parse JSON for caption ${caption.id}:`,
+              error
+            );
+            parsedValueText = caption.value_text;
+          }
+        }
       }
-      return caption;
+
+      return {
+        ...caption,
+        value_text: parsedValueText,
+      };
     })
   );
   return c.json(
