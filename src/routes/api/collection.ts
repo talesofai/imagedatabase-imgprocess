@@ -5,6 +5,7 @@ import {
   findCollectionByName,
   createArtifactCollectionMap,
   findArtifactByPath,
+  findArtifactById,
 } from '../../db/index';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -18,7 +19,8 @@ interface CreateCollectionRequestBody {
 
 interface AddArtifactToCollectionRequestBody {
   collection_id: string;
-  r2SourcePath: string;
+  r2SourcePath?: string; // 可选的 R2 源路径
+  imageId?: string; // 可选的 artifact ID
 }
 
 // 创建新的 collection
@@ -98,26 +100,47 @@ app.post('/add-artifact', async (c) => {
       return c.json({ error: 'collection_id is required' }, 400);
     }
 
-    if (!body.r2SourcePath) {
-      return c.json({ error: 'r2SourcePath is required' }, 400);
+    if (!body.r2SourcePath && !body.imageId) {
+      return c.json(
+        { error: 'Either r2SourcePath or imageId is required' },
+        400
+      );
+    }
+
+    if (body.r2SourcePath && body.imageId) {
+      return c.json(
+        { error: 'Only one of r2SourcePath or imageId should be provided' },
+        400
+      );
     }
 
     // 验证 collection 是否存在
     const collection = await findCollectionById(c.env, body.collection_id);
     if (!collection) {
       return c.json({ error: 'Collection not found' }, 404);
-    }
-
-    // 查找 artifact
-    const artifact = await findArtifactByPath(c.env, body.r2SourcePath);
-    if (!artifact) {
-      return c.json({ error: 'Artifact not found for the given path' }, 404);
+    } // 获取 artifact_id
+    let artifact_id: string;
+    if (body.imageId) {
+      // 如果提供了 imageId，直接使用它作为 artifact_id
+      artifact_id = body.imageId;
+    } else if (body.r2SourcePath) {
+      // 如果提供了路径，需要查找 artifact
+      const artifact = await findArtifactByPath(c.env, body.r2SourcePath);
+      if (!artifact) {
+        return c.json({ error: 'Artifact not found for the given path' }, 404);
+      }
+      artifact_id = artifact.id;
+    } else {
+      return c.json(
+        { error: 'Either r2SourcePath or imageId is required' },
+        400
+      );
     }
 
     // 创建 artifact-collection 映射
     const currentTime = Date.now();
     const mappingRecord = {
-      artifact_id: artifact.id,
+      artifact_id: artifact_id,
       collection_id: body.collection_id,
       add_time: currentTime,
     };
@@ -137,12 +160,11 @@ app.post('/add-artifact', async (c) => {
         500
       );
     }
-
     return c.json(
       {
         success: true,
         mapping: {
-          artifact_id: artifact.id,
+          artifact_id: artifact_id,
           collection_id: body.collection_id,
           add_time: currentTime,
         },
