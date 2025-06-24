@@ -63,43 +63,6 @@ app.post('/', async (c) => {
       fileName.split('.').pop()?.toLowerCase() || imageInfo.type || 'jpg';
     const objectKey = `original/${firstTwoChars}/${nextTwoChars}/${file_md5_hash}.${extension}`;
 
-    // 判断md5是否已存在
-    const existingArtifact = await findArtifactByPath(c.env, objectKey);
-    if (existingArtifact && collectionId) {
-      const collection_map = {
-        artifact_id: existingArtifact.id,
-        collection_id: collectionId,
-        add_time: Date.now(),
-      };
-      const collectionMapping = await createArtifactCollectionMap(
-        c.env,
-        collection_map
-      );
-      if (!collectionMapping) {
-        throw new HTTPException(500, {
-          message: 'Failed to create artifact-collection mapping.',
-        });
-      }
-      return c.json({
-        success: true,
-        r2Path: objectKey,
-        artifactId: existingArtifact.id,
-        message: 'File already exists, added to collection successfully.',
-        collection_association: {
-          collection_id: collectionId,
-          added_to_collection: true,
-          add_time: collection_map.add_time,
-        },
-      });
-    } else if (existingArtifact) {
-      return c.json({
-        success: true,
-        r2Path: objectKey,
-        artifactId: existingArtifact.id,
-        message: 'File already exists, no collection association made.',
-      });
-    }
-
     await (IMAGE_BUCKET as any).put(objectKey, fileBuffer, {
       httpMetadata: {
         contentType: file.type || 'image/jpeg',
@@ -129,8 +92,44 @@ app.post('/', async (c) => {
       await createArtifact(c.env, artifactPayload);
     } catch (dbError) {
       console.error('Error creating artifact:', dbError);
+      // 判断md5是否已存在
+      const existingArtifact = await findArtifactByPath(c.env, objectKey);
+      if (existingArtifact && collectionId) {
+        const collection_map = {
+          artifact_id: existingArtifact.id,
+          collection_id: collectionId,
+          add_time: Date.now(),
+        };
+        const collectionMapping = await createArtifactCollectionMap(
+          c.env,
+          collection_map
+        );
+        if (!collectionMapping) {
+          throw new HTTPException(500, {
+            message: 'Failed to create artifact-collection mapping.',
+          });
+        }
+        return c.json({
+          success: true,
+          r2Path: objectKey,
+          artifactId: existingArtifact.id,
+          message: 'File already exists, added to collection successfully.',
+          collection_association: {
+            collection_id: collectionId,
+            added_to_collection: true,
+            add_time: collection_map.add_time,
+          },
+        });
+      } else if (existingArtifact) {
+        return c.json({
+          success: true,
+          r2Path: objectKey,
+          artifactId: existingArtifact.id,
+          message: 'File already exists, no collection association made.',
+        });
+      }
       throw new HTTPException(500, {
-        message: 'Failed to create artifact record in database.',
+        message: 'Failed to create artifact in database.',
       });
     } // 处理 collection 关联 - 支持通过 ID 或名称
     let collectionMapping = null;
