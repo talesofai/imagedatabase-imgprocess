@@ -88,49 +88,65 @@ app.post('/', async (c) => {
       is_deleted: false,
       is_resized: false,
     }; // Create artifact in database
-    try {
-      await createArtifact(c.env, artifactPayload);
-    } catch (dbError) {
-      console.error('Error creating artifact:', dbError);
-      // 判断md5是否已存在
-      const existingArtifact = await findArtifactByPath(c.env, objectKey);
-      if (existingArtifact && collectionId) {
-        const collection_map = {
-          artifact_id: existingArtifact.id,
-          collection_id: collectionId,
-          add_time: Date.now(),
-        };
-        const collectionMapping = await createArtifactCollectionMap(
-          c.env,
-          collection_map
-        );
-        if (!collectionMapping) {
-          throw new HTTPException(500, {
-            message: 'Failed to create artifact-collection mapping.',
+    const createdArtifact = await createArtifact(c.env, artifactPayload);
+    if (!createdArtifact) {
+      // 创建失败，可能是md5已存在，尝试查找现有artifact
+      console.log(
+        'Artifact creation returned null, checking for existing artifact'
+      );
+      try {
+        const existingArtifact = await findArtifactByPath(c.env, objectKey);
+        console.log('Existing artifact found by path:', existingArtifact);
+        if (existingArtifact && collectionId) {
+          const collection_map = {
+            artifact_id: existingArtifact.id,
+            collection_id: collectionId,
+            add_time: Date.now(),
+          };
+          const collectionMapping = await createArtifactCollectionMap(
+            c.env,
+            collection_map
+          );
+          if (!collectionMapping) {
+            console.error(
+              'Failed to create artifact-collection mapping for existing artifact'
+            );
+            return c.json(
+              {
+                success: false,
+                message:
+                  'Failed to create collection association for existing artifact.',
+              },
+              500
+            );
+          }
+          return c.json({
+            success: true,
+            r2Path: objectKey,
+            artifactId: existingArtifact.id,
+            message: 'File already exists, added to collection successfully.',
+            collection_association: {
+              collection_id: collectionId,
+              added_to_collection: true,
+              add_time: collection_map.add_time,
+            },
+          });
+        } else if (existingArtifact) {
+          return c.json({
+            success: true,
+            r2Path: objectKey,
+            artifactId: existingArtifact.id,
+            message: 'File already exists, no collection association made.',
           });
         }
-        return c.json({
-          success: true,
-          r2Path: objectKey,
-          artifactId: existingArtifact.id,
-          message: 'File already exists, added to collection successfully.',
-          collection_association: {
-            collection_id: collectionId,
-            added_to_collection: true,
-            add_time: collection_map.add_time,
-          },
-        });
-      } else if (existingArtifact) {
-        return c.json({
-          success: true,
-          r2Path: objectKey,
-          artifactId: existingArtifact.id,
-          message: 'File already exists, no collection association made.',
-        });
+      } catch (findError) {
+        console.error('Error finding existing artifact:', findError);
       }
-      throw new HTTPException(500, {
-        message: 'Failed to create artifact in database.',
-      });
+      console.error('Failed to create artifact:', artifactPayload);
+      return c.json(
+        { error: 'Failed to create artifact in the database' },
+        500
+      );
     } // 处理 collection 关联 - 支持通过 ID 或名称
     let collectionMapping = null;
     let collectionResult = null;
