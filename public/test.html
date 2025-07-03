@@ -250,12 +250,18 @@
           <div class="endpoint-url">POST /api/v1/caption</div>
           <form id="caption-form">
             <div class="form-group">
+              <label>选择输入方式:</label>
+              <select id="caption-input-type" onchange="toggleCaptionInputs()">
+                <option value="path">使用 R2 路径</option>
+                <option value="id">使用图像 ID</option>
+              </select>
+            </div>
+            <div class="form-group" id="caption-path-group">
               <label for="caption-path">R2 源路径:</label>
               <input
                 type="text"
                 id="caption-path"
                 placeholder="original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
-                required
               />
               <button
                 type="button"
@@ -265,10 +271,35 @@
                 从上传结果复制
               </button>
             </div>
+            <div class="form-group" id="caption-id-group" style="display: none">
+              <label for="caption-image-id">图像 ID:</label>
+              <input
+                type="text"
+                id="caption-image-id"
+                placeholder="artifact-uuid"
+              />
+              <button
+                type="button"
+                class="copy-btn"
+                onclick="copyFromUpload('caption-image-id', 'id')"
+              >
+                从上传结果复制
+              </button>
+            </div>
             <div class="form-group">
-              <label for="caption-model">模型 (可选):</label>
+              <label for="caption-provider">AI 提供商:</label>
+              <select
+                id="caption-provider"
+                onchange="updateCaptionModelOptions()"
+              >
+                <option value="gemini">Gemini (默认)</option>
+                <option value="openai">OpenAI</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="caption-model">模型:</label>
               <select id="caption-model">
-                <option value="">默认 (gemini-2.5-pro-preview-05-06)</option>
+                <option value="">默认</option>
                 <option value="gemini-2.5-pro-preview-05-06">
                   gemini-2.5-pro-preview-05-06
                 </option>
@@ -277,16 +308,94 @@
               </select>
             </div>
             <div class="form-group">
-              <label for="caption-prompt">提示语 (可选):</label>
+              <label for="caption-size">图像尺寸 (仅限图像ID):</label>
+              <select id="caption-size">
+                <option value="">原始尺寸</option>
+                <option value="256x">256x</option>
+                <option value="1024x">1024x</option>
+                <option value="2048x">2048x</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="caption-prompt">提示语:</label>
               <textarea
                 id="caption-prompt"
                 placeholder="Generate a list of relevant tags for this image. Provide them as a comma-separated list."
               ></textarea>
             </div>
+            <div class="form-group">
+              <label for="caption-temperature">温度 (0-1):</label>
+              <input
+                type="number"
+                id="caption-temperature"
+                min="0"
+                max="1"
+                step="0.1"
+                placeholder="0.7"
+              />
+            </div>
             <button type="submit">生成标签</button>
           </form>
           <div
             id="caption-response"
+            class="response"
+            style="display: none"
+          ></div>
+        </div>
+
+        <!-- Get Captions -->
+        <div class="test-section">
+          <h2>📋 获取标签 (Get Captions)</h2>
+          <div class="endpoint-url">GET /api/v1/caption</div>
+          <form id="get-caption-form">
+            <div class="form-group">
+              <label>选择查询方式:</label>
+              <select
+                id="get-caption-input-type"
+                onchange="toggleGetCaptionInputs()"
+              >
+                <option value="path">使用 R2 路径</option>
+                <option value="id">使用图像 ID</option>
+              </select>
+            </div>
+            <div class="form-group" id="get-caption-path-group">
+              <label for="get-caption-path">R2 源路径:</label>
+              <input
+                type="text"
+                id="get-caption-path"
+                placeholder="original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
+              />
+              <button
+                type="button"
+                class="copy-btn"
+                onclick="copyFromUpload('get-caption-path')"
+              >
+                从上传结果复制
+              </button>
+            </div>
+            <div
+              class="form-group"
+              id="get-caption-id-group"
+              style="display: none"
+            >
+              <label for="get-caption-image-id">图像 ID:</label>
+              <input
+                type="text"
+                id="get-caption-image-id"
+                placeholder="artifact-uuid"
+              />
+              <button
+                type="button"
+                class="copy-btn"
+                onclick="copyFromUpload('get-caption-image-id', 'id')"
+              >
+                从上传结果复制
+              </button>
+            </div>
+            <button type="submit">获取标签</button>
+          </form>
+          <div
+            id="get-caption-response"
             class="response"
             style="display: none"
           ></div>
@@ -342,7 +451,7 @@
 
         <div class="grid" style="margin-top: 30px">
           <div>
-            <h3>按 ID 添加图像到 Collection</h3>
+            <h3>添加图像到 Collection</h3>
             <div class="endpoint-url">POST /api/v1/collection/add-artifact</div>
             <form id="collection-add-form">
               <div class="form-group">
@@ -362,17 +471,38 @@
                 </button>
               </div>
               <div class="form-group">
+                <label>选择添加方式:</label>
+                <select id="add-input-type" onchange="toggleAddInputs()">
+                  <option value="path">使用 R2 路径</option>
+                  <option value="id">使用图像 ID</option>
+                </select>
+              </div>
+              <div class="form-group" id="add-path-group">
                 <label for="add-r2-path">R2 源路径:</label>
                 <input
                   type="text"
                   id="add-r2-path"
                   placeholder="original/02/00/02000e6b9c70a21cfc590ce3d936ec8c.png"
-                  required
                 />
                 <button
                   type="button"
                   class="copy-btn"
                   onclick="copyFromUpload('add-r2-path')"
+                >
+                  从上传结果复制
+                </button>
+              </div>
+              <div class="form-group" id="add-id-group" style="display: none">
+                <label for="add-image-id">图像 ID:</label>
+                <input
+                  type="text"
+                  id="add-image-id"
+                  placeholder="artifact-uuid"
+                />
+                <button
+                  type="button"
+                  class="copy-btn"
+                  onclick="copyFromUpload('add-image-id', 'id')"
                 >
                   从上传结果复制
                 </button>
@@ -458,11 +588,18 @@
         }
       }
 
-      // 复制上传结果中的路径
-      function copyFromUpload(targetInputId) {
-        if (lastUploadResult && lastUploadResult.r2Path) {
-          document.getElementById(targetInputId).value =
-            lastUploadResult.r2Path;
+      // 复制上传结果中的路径或ID
+      function copyFromUpload(targetInputId, type = 'path') {
+        if (lastUploadResult) {
+          if (type === 'id' && lastUploadResult.artifactId) {
+            document.getElementById(targetInputId).value =
+              lastUploadResult.artifactId;
+          } else if (type === 'path' && lastUploadResult.r2Path) {
+            document.getElementById(targetInputId).value =
+              lastUploadResult.r2Path;
+          } else {
+            alert('上传结果中没有找到对应的信息！');
+          }
         } else {
           alert('请先上传一个图像文件！');
         }
@@ -479,6 +616,79 @@
             lastCollectionResult.collection.id;
         } else {
           alert('请先创建一个Collection！');
+        }
+      }
+
+      // 切换Caption输入方式
+      function toggleCaptionInputs() {
+        const inputType = document.getElementById('caption-input-type').value;
+        const pathGroup = document.getElementById('caption-path-group');
+        const idGroup = document.getElementById('caption-id-group');
+
+        if (inputType === 'path') {
+          pathGroup.style.display = 'block';
+          idGroup.style.display = 'none';
+        } else {
+          pathGroup.style.display = 'none';
+          idGroup.style.display = 'block';
+        }
+      }
+
+      // 切换获取Caption输入方式
+      function toggleGetCaptionInputs() {
+        const inputType = document.getElementById(
+          'get-caption-input-type'
+        ).value;
+        const pathGroup = document.getElementById('get-caption-path-group');
+        const idGroup = document.getElementById('get-caption-id-group');
+
+        if (inputType === 'path') {
+          pathGroup.style.display = 'block';
+          idGroup.style.display = 'none';
+        } else {
+          pathGroup.style.display = 'none';
+          idGroup.style.display = 'block';
+        }
+      }
+
+      // 切换Collection添加输入方式
+      function toggleAddInputs() {
+        const inputType = document.getElementById('add-input-type').value;
+        const pathGroup = document.getElementById('add-path-group');
+        const idGroup = document.getElementById('add-id-group');
+
+        if (inputType === 'path') {
+          pathGroup.style.display = 'block';
+          idGroup.style.display = 'none';
+        } else {
+          pathGroup.style.display = 'none';
+          idGroup.style.display = 'block';
+        }
+      }
+
+      // 更新Caption模型选项
+      function updateCaptionModelOptions() {
+        const provider = document.getElementById('caption-provider').value;
+        const modelSelect = document.getElementById('caption-model');
+
+        // 清空现有选项
+        modelSelect.innerHTML = '';
+
+        if (provider === 'gemini') {
+          modelSelect.innerHTML = `
+            <option value="">默认 (gemini-2.5-pro-preview-05-06)</option>
+            <option value="gemini-2.5-pro-preview-05-06">gemini-2.5-pro-preview-05-06</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+          `;
+        } else if (provider === 'openai') {
+          modelSelect.innerHTML = `
+            <option value="">默认 (gpt-4o)</option>
+            <option value="gpt-4o">gpt-4o</option>
+            <option value="gpt-4o-mini">gpt-4o-mini</option>
+            <option value="o4-mini">o4-mini</option>
+            <option value="gpt-4">gpt-4</option>
+          `;
         }
       } // 健康检查
       async function testHealth() {
@@ -609,15 +819,32 @@
           e.preventDefault();
           showResponse('caption-response', null, false, true);
 
+          const inputType = document.getElementById('caption-input-type').value;
           const r2SourcePath = document.getElementById('caption-path').value;
-          const token = getGlobalToken();
+          const imageId = document.getElementById('caption-image-id').value;
+          const provider = document.getElementById('caption-provider').value;
           const model = document.getElementById('caption-model').value;
+          const size = document.getElementById('caption-size').value;
           const prompt = document.getElementById('caption-prompt').value;
+          const temperature = document.getElementById(
+            'caption-temperature'
+          ).value;
+          const token = getGlobalToken();
 
-          if (!r2SourcePath) {
+          // 验证必填字段
+          if (inputType === 'path' && !r2SourcePath) {
             showResponse(
               'caption-response',
               { error: 'R2 源路径不能为空' },
+              true
+            );
+            return;
+          }
+
+          if (inputType === 'id' && !imageId) {
+            showResponse(
+              'caption-response',
+              { error: '图像 ID 不能为空' },
               true
             );
             return;
@@ -632,9 +859,21 @@
             return;
           }
 
-          const requestBody = { r2SourcePath };
+          const requestBody = {};
+
+          if (inputType === 'path') {
+            requestBody.r2SourcePath = r2SourcePath;
+          } else {
+            requestBody.image_id = imageId;
+            if (size) requestBody.size = size;
+          }
+
+          if (provider && provider !== 'gemini') {
+            requestBody.provider = provider;
+          }
           if (model) requestBody.model = model;
           if (prompt) requestBody.prompt = prompt;
+          if (temperature) requestBody.tempreture = parseFloat(temperature);
 
           try {
             const response = await fetch('/api/v1/caption', {
@@ -649,6 +888,76 @@
             showResponse('caption-response', data, !response.ok);
           } catch (error) {
             showResponse('caption-response', { error: error.message }, true);
+          }
+        });
+
+      // 获取标签
+      document
+        .getElementById('get-caption-form')
+        .addEventListener('submit', async (e) => {
+          e.preventDefault();
+          showResponse('get-caption-response', null, false, true);
+
+          const inputType = document.getElementById(
+            'get-caption-input-type'
+          ).value;
+          const r2SourcePath =
+            document.getElementById('get-caption-path').value;
+          const imageId = document.getElementById('get-caption-image-id').value;
+          const token = getGlobalToken();
+
+          // 验证必填字段
+          if (inputType === 'path' && !r2SourcePath) {
+            showResponse(
+              'get-caption-response',
+              { error: 'R2 源路径不能为空' },
+              true
+            );
+            return;
+          }
+
+          if (inputType === 'id' && !imageId) {
+            showResponse(
+              'get-caption-response',
+              { error: '图像 ID 不能为空' },
+              true
+            );
+            return;
+          }
+
+          if (!token) {
+            showResponse(
+              'get-caption-response',
+              { error: '请先设置 Authorization Token' },
+              true
+            );
+            return;
+          }
+
+          const params = new URLSearchParams();
+          if (inputType === 'path') {
+            params.append('r2SourcePath', r2SourcePath);
+          } else {
+            params.append('image_id', imageId);
+          }
+
+          try {
+            const response = await fetch(
+              `/api/v1/caption?${params.toString()}`,
+              {
+                headers: {
+                  Authorization: token,
+                },
+              }
+            );
+            const data = await response.json();
+            showResponse('get-caption-response', data, !response.ok);
+          } catch (error) {
+            showResponse(
+              'get-caption-response',
+              { error: error.message },
+              true
+            );
           }
         });
 
@@ -725,11 +1034,32 @@
 
           const collectionId =
             document.getElementById('add-collection-id').value;
+          const inputType = document.getElementById('add-input-type').value;
           const r2SourcePath = document.getElementById('add-r2-path').value;
-          if (!collectionId || !r2SourcePath) {
+          const imageId = document.getElementById('add-image-id').value;
+
+          if (!collectionId) {
             showResponse(
               'collection-add-response',
-              { error: 'Collection ID 和 R2 源路径不能为空' },
+              { error: 'Collection ID 不能为空' },
+              true
+            );
+            return;
+          }
+
+          if (inputType === 'path' && !r2SourcePath) {
+            showResponse(
+              'collection-add-response',
+              { error: 'R2 源路径不能为空' },
+              true
+            );
+            return;
+          }
+
+          if (inputType === 'id' && !imageId) {
+            showResponse(
+              'collection-add-response',
+              { error: '图像 ID 不能为空' },
               true
             );
             return;
@@ -745,6 +1075,14 @@
             return;
           }
 
+          const requestBody = { collection_id: collectionId };
+
+          if (inputType === 'path') {
+            requestBody.r2SourcePath = r2SourcePath;
+          } else {
+            requestBody.imageId = imageId;
+          }
+
           try {
             const response = await fetch('/api/v1/collection/add-artifact', {
               method: 'POST',
@@ -752,10 +1090,7 @@
                 'Content-Type': 'application/json',
                 Authorization: token,
               },
-              body: JSON.stringify({
-                collection_id: collectionId,
-                r2SourcePath,
-              }),
+              body: JSON.stringify(requestBody),
             });
             const data = await response.json();
             showResponse('collection-add-response', data, !response.ok);

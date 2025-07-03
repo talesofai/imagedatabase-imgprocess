@@ -25,6 +25,7 @@ interface CaptionRequestBody {
   image_id?: string;
   size?: string; // Optional, defaults to '1024'
   model?: string; // Optional, defaults to 'gemini-2.5-pro-preview-05-06'
+  provider?: 'gemini' | 'openai'; // Optional, defaults to 'gemini'
   prompt?: string; // Optional, defaults to 'Generate a concise, descriptive caption for this image.'
   presetkey?: string; // Optional, defaults to 'gemini_english_description'
   tempreture?: number; // Optional, defaults to 0.7
@@ -38,6 +39,14 @@ interface GeminiCandidate {
 
 interface GeminiResponse {
   candidates?: GeminiCandidate[];
+}
+
+interface OpenAIResponse {
+  choices?: Array<{
+    message: {
+      content: string;
+    };
+  }>;
 }
 
 app.get('/', async (c) => {
@@ -177,7 +186,9 @@ app.post('/', async (c) => {
       return c.json({ error: 'r2SourcePath is required' }, 400);
     }
 
+    const provider = body.provider || 'gemini';
     const geminiModel = body.model || 'gemini-2.5-pro-preview-05-06';
+    const openaiModel = body.model || 'gpt-4o';
     const geminiPrompt =
       body.prompt ||
       'Generate a list of relevant tags for this image. Provide them as a comma-separated list.'; // Changed default prompt
@@ -205,66 +216,125 @@ app.post('/', async (c) => {
     // 2. Convert image to base64 for Gemini
     const imageBase64 = arrayBufferToBase64(imageArrayBuffer);
 
-    // 3. Get Gemini API Key from environment variables
-    const apiKey = c.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return c.json({ error: 'Gemini API key is not configured.' }, 500);
+    // 3. Get API Key from environment variables
+    let apiKey: string;
+    if (provider === 'openai') {
+      apiKey = c.env.OPENAI_API_KEY;
+      if (!apiKey) {
+        return c.json({ error: 'OpenAI API key is not configured.' }, 500);
+      }
+    } else {
+      apiKey = c.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        return c.json({ error: 'Gemini API key is not configured.' }, 500);
+      }
     }
 
-    // 4. Prepare request for Gemini API
-    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+    let captionText: string | undefined;
 
-    const geminiPayload = {
-      contents: [
-        {
-          parts: [
-            { text: geminiPrompt },
-            {
-              inline_data: {
-                mime_type: imageMimeType,
-                data: imageBase64,
+    if (provider === 'openai') {
+      // 4. Call OpenAI API
+      const openaiBaseUrl = c.env.OPENAI_BASE_URL || 'https://api.openai.com';
+      const openaiApiUrl = `${openaiBaseUrl}/v1/chat/completions`;
+
+      const openaiPayload = {
+        model: openaiModel,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: geminiPrompt,
               },
-            },
-          ],
-        },
-      ],
-      generationConfig: {
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${imageMimeType};base64,${imageBase64}`,
+                },
+              },
+            ],
+          },
+        ],
         temperature: temperature,
-      },
-    };
-    // 5. Call Gemini API
-    const geminiApiResponse = await fetch(geminiApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(geminiPayload),
-    });
+        max_tokens: 1000,
+      };
 
-    if (!geminiApiResponse.ok) {
-      const errorBody = await geminiApiResponse.text();
-      console.error('Gemini API error:', errorBody);
-      return c.json(
-        {
-          error: `Gemini API request failed: ${geminiApiResponse.statusText}`,
-          details: errorBody,
+      const openaiApiResponse = await fetch(openaiApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
         },
-        geminiApiResponse.status as any // Cast status for Hono
-      );
-    }
+        body: JSON.stringify(openaiPayload),
+      });
 
-    const geminiResult = (await geminiApiResponse.json()) as GeminiResponse; // 6. Extract text from Gemini response
-    const captionText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!openaiApiResponse.ok) {
+        const errorBody = await openaiApiResponse.text();
+        console.error('OpenAI API error:', errorBody);
+        return c.json(
+          {
+            error: `OpenAI API request failed: ${openaiApiResponse.statusText}`,
+            details: errorBody,
+          },
+          openaiApiResponse.status as any
+        );
+      }
+
+      const openaiResult = (await openaiApiResponse.json()) as OpenAIResponse;
+      captionText = openaiResult.choices?.[0]?.message?.content;
+    } else {
+      // 4. Call Gemini API
+      const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
+
+      const geminiPayload = {
+        contents: [
+          {
+            parts: [
+              { text: geminiPrompt },
+              {
+                inline_data: {
+                  mime_type: imageMimeType,
+                  data: imageBase64,
+                },
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: temperature,
+        },
+      };
+
+      const geminiApiResponse = await fetch(geminiApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(geminiPayload),
+      });
+
+      if (!geminiApiResponse.ok) {
+        const errorBody = await geminiApiResponse.text();
+        console.error('Gemini API error:', errorBody);
+        return c.json(
+          {
+            error: `Gemini API request failed: ${geminiApiResponse.statusText}`,
+            details: errorBody,
+          },
+          geminiApiResponse.status as any
+        );
+      }
+
+      const geminiResult = (await geminiApiResponse.json()) as GeminiResponse;
+      captionText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
 
     if (!captionText) {
-      console.error(
-        'Could not extract caption from Gemini response:',
-        geminiResult
-      );
+      console.error(`Could not extract caption from ${provider} response`);
       return c.json(
         {
-          error: 'Failed to parse caption from Gemini response',
-          details: geminiResult,
+          error: `Failed to parse caption from ${provider} response`,
         },
         500
       );
@@ -286,7 +356,8 @@ app.post('/', async (c) => {
           {
             success: true,
             caption: captionText,
-            model_id: geminiModel,
+            model_id: provider === 'openai' ? openaiModel : geminiModel,
+            provider: provider,
             imagepath: body.r2SourcePath,
             warning:
               'Caption generated but not saved to database - artifact not found',
@@ -299,7 +370,8 @@ app.post('/', async (c) => {
       const currentTime = Date.now();
       const captionId = crypto.randomUUID();
       const extra_data = {
-        model: geminiModel,
+        model: provider === 'openai' ? openaiModel : geminiModel,
+        provider: provider,
         prompt: geminiPrompt,
         temperature: temperature,
         image_path: body.r2SourcePath,
@@ -322,7 +394,8 @@ app.post('/', async (c) => {
           {
             success: true,
             caption: captionText,
-            model_id: geminiModel,
+            model_id: provider === 'openai' ? openaiModel : geminiModel,
+            provider: provider,
             imagepath: body.r2SourcePath,
             warning: 'Caption generated but failed to save to database',
           },
@@ -346,7 +419,8 @@ app.post('/', async (c) => {
           {
             success: true,
             caption: captionText,
-            model_id: geminiModel,
+            model_id: provider === 'openai' ? openaiModel : geminiModel,
+            provider: provider,
             imagepath: body.r2SourcePath,
             caption_id: captionId,
             warning: 'Caption saved but failed to create artifact mapping',
@@ -360,7 +434,8 @@ app.post('/', async (c) => {
         {
           success: true,
           caption: captionText,
-          model_id: geminiModel,
+          model_id: provider === 'openai' ? openaiModel : geminiModel,
+          provider: provider,
           imagepath: body.r2SourcePath,
           caption_id: captionId,
           artifact_id: artifact.id,
@@ -375,7 +450,8 @@ app.post('/', async (c) => {
         {
           success: true,
           caption: captionText,
-          model_id: geminiModel,
+          model_id: provider === 'openai' ? openaiModel : geminiModel,
+          provider: provider,
           imagepath: body.r2SourcePath,
           warning: 'Caption generated but database save failed',
           error_details:
