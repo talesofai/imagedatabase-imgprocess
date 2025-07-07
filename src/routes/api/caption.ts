@@ -473,4 +473,94 @@ app.post('/', async (c) => {
   }
 });
 
+interface CreateRequestBody {
+  prompt: string;
+  model: string;
+  temperature?: number; // Optional, defaults to 0.7
+}
+
+app.post('/create', async (c) => {
+  try {
+    const body = await c.req.json<CreateRequestBody>();
+    if (!body.prompt || !body.model) {
+      return c.json({ error: 'prompt and model are required' }, 400);
+    }
+
+    const temperature = body.temperature || 0.7;
+
+    // Get Gemini API Key from environment variables
+    const apiKey = c.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return c.json({ error: 'Gemini API key is not configured.' }, 500);
+    }
+
+    // Call Gemini API
+    const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${body.model}:generateContent?key=${apiKey}`;
+
+    const geminiPayload = {
+      contents: [
+        {
+          parts: [{ text: body.prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: temperature,
+      },
+    };
+
+    const geminiApiResponse = await fetch(geminiApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(geminiPayload),
+    });
+
+    if (!geminiApiResponse.ok) {
+      const errorBody = await geminiApiResponse.text();
+      console.error('Gemini API error:', errorBody);
+      return c.json(
+        {
+          error: `Gemini API request failed: ${geminiApiResponse.statusText}`,
+          details: errorBody,
+        },
+        geminiApiResponse.status as any
+      );
+    }
+
+    const geminiResult = (await geminiApiResponse.json()) as GeminiResponse;
+    const responseText =
+      geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!responseText) {
+      console.error('Could not extract response from Gemini API');
+      return c.json(
+        {
+          error: 'Failed to parse response from Gemini API',
+        },
+        500
+      );
+    }
+
+    return c.json(
+      {
+        success: true,
+        response: responseText,
+        model: body.model,
+        prompt: body.prompt,
+        temperature: temperature,
+      },
+      200
+    );
+  } catch (error) {
+    console.error('Error in create endpoint:', error);
+    const errorMessage =
+      error instanceof Error ? error.message : 'An unknown error occurred';
+    return c.json(
+      { error: 'Internal server error', details: errorMessage },
+      500
+    );
+  }
+});
+
 export default app;
