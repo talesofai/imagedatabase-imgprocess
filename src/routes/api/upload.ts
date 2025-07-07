@@ -15,6 +15,99 @@ import imageSize from 'image-size';
 
 const app = new Hono<{ Bindings: Env }>();
 
+// 辅助函数：处理 collection 关联
+async function handleCollectionAssociation(
+  env: Env,
+  artifactId: string,
+  collectionId: string | null,
+  collectionName: string | null
+) {
+  let targetCollection = null;
+  let isNewCollection = false;
+
+  // 优先使用 collection_id
+  if (
+    collectionId &&
+    typeof collectionId === 'string' &&
+    collectionId.trim() !== ''
+  ) {
+    try {
+      targetCollection = await findCollectionById(env, collectionId.trim());
+    } catch (error) {
+      console.warn(`Failed to find collection by ID: ${collectionId}`, error);
+    }
+  }
+
+  // 如果没有通过ID找到collection，且提供了名称，则按名称查找或创建
+  if (
+    !targetCollection &&
+    collectionName &&
+    typeof collectionName === 'string' &&
+    collectionName.trim() !== ''
+  ) {
+    try {
+      targetCollection = await findCollectionByName(env, collectionName.trim());
+
+      // 如果按名称没有找到，则创建新的 collection
+      if (!targetCollection) {
+        const currentTime = Date.now();
+        const newCollectionId = crypto.randomUUID();
+        const collectionRecord = {
+          id: newCollectionId,
+          name: collectionName.trim(),
+          description: `由系统自动创建的集合: ${collectionName.trim()}`,
+          create_time: currentTime,
+          update_time: currentTime,
+          cover_artifact_id: undefined,
+          is_deleted: false,
+        };
+
+        const savedCollection = await createCollection(env, collectionRecord);
+        if (savedCollection) {
+          targetCollection = collectionRecord;
+          isNewCollection = true;
+          console.log(`Created new collection: ${collectionName.trim()}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error handling collection by name:', error);
+    }
+  }
+
+  // 创建关联
+  if (targetCollection) {
+    try {
+      const currentTime = Date.now();
+      const mappingRecord = {
+        artifact_id: artifactId,
+        collection_id: targetCollection.id,
+        add_time: currentTime,
+      };
+
+      const collectionMapping = await createArtifactCollectionMap(
+        env,
+        mappingRecord
+      );
+      if (collectionMapping) {
+        return {
+          collection_id: targetCollection.id,
+          collection_name: targetCollection.name,
+          added_to_collection: true,
+          is_new_collection: isNewCollection,
+          add_time: currentTime,
+        };
+      }
+    } catch (error) {
+      console.error('Error creating artifact-collection mapping:', error);
+    }
+  }
+
+  return {
+    added_to_collection: false,
+    warning: 'Collection not found or failed to create association',
+  };
+}
+
 app.post('/', async (c) => {
   const { IMAGE_BUCKET } = env(c);
   if (!IMAGE_BUCKET) {
@@ -49,7 +142,9 @@ app.post('/', async (c) => {
       throw new HTTPException(500, {
         message: 'Failed to generate MD5 hash for the file.',
       });
-    } // Get image dimensions and format
+    }
+
+    // Get image dimensions and format
     const imageInfo = imageSize(new Uint8Array(fileBuffer));
     if (!imageInfo.width || !imageInfo.height || !imageInfo.type) {
       throw new HTTPException(400, {
@@ -63,6 +158,57 @@ app.post('/', async (c) => {
       fileName.split('.').pop()?.toLowerCase() || imageInfo.type || 'jpg';
     const objectKey = `original/${firstTwoChars}/${nextTwoChars}/${file_md5_hash}.${extension}`;
 
+    // 首先检查文件是否已存在于数据库中
+    let existingArtifact = null;
+    try {
+      existingArtifact = await findArtifactByPath(c.env, objectKey);
+    } catch (findError) {
+      console.warn('Error checking for existing artifact:', findError);
+      // 继续执行，不阻止上传流程
+    }
+
+    // 如果文件已存在，处理 collection 关联并返回
+    if (existingArtifact) {
+      console.log('File already exists, handling collection association');
+
+      // 处理 collection 关联
+      let collectionResult = null;
+      if (collectionId || collectionName) {
+        try {
+          const collectionAssociation = await handleCollectionAssociation(
+            c.env,
+            existingArtifact.id,
+            collectionId,
+            collectionName
+          );
+          collectionResult = collectionAssociation;
+        } catch (collectionError) {
+          console.error(
+            'Error handling collection association for existing file:',
+            collectionError
+          );
+        }
+      }
+
+      return c.json({
+        success: true,
+        r2Path: objectKey,
+        artifactId: existingArtifact.id,
+        imageInfo: {
+          width: existingArtifact.width,
+          height: existingArtifact.height,
+          format: existingArtifact.format,
+          size: existingArtifact.size,
+          pixels: existingArtifact.pixels,
+        },
+        message: 'File already exists',
+        ...(collectionResult && {
+          collection_association: collectionResult,
+        }),
+      });
+    }
+
+    // 文件不存在，继续上传流程
     await (IMAGE_BUCKET as any).put(objectKey, fileBuffer, {
       httpMetadata: {
         contentType: file.type || 'image/jpeg',
@@ -87,162 +233,86 @@ app.post('/', async (c) => {
       original_path: objectKey,
       is_deleted: false,
       is_resized: false,
-    }; // Create artifact in database
+    };
+
+    // Create artifact in database
     const createdArtifact = await createArtifact(c.env, artifactPayload);
     if (!createdArtifact) {
-      // 创建失败，可能是md5已存在，尝试查找现有artifact
-      console.log(
-        'Artifact creation returned null, checking for existing artifact'
+      console.error(
+        'Failed to create artifact in database. This may indicate a duplicate MD5 or database constraint violation.'
       );
+
+      // 尝试查找是否已经存在相同的 artifact（可能是并发上传导致的）
       try {
         const existingArtifact = await findArtifactByPath(c.env, objectKey);
-        console.log('Existing artifact found by path:', existingArtifact);
-        if (existingArtifact && collectionId) {
-          const collection_map = {
-            artifact_id: existingArtifact.id,
-            collection_id: collectionId,
-            add_time: Date.now(),
-          };
-          const collectionMapping = await createArtifactCollectionMap(
-            c.env,
-            collection_map
+        if (existingArtifact) {
+          console.log(
+            'Found existing artifact after failed creation, likely due to concurrent upload'
           );
-          if (!collectionMapping) {
-            console.error(
-              'Failed to create artifact-collection mapping for existing artifact'
-            );
-            return c.json(
-              {
-                success: false,
-                message:
-                  'Failed to create collection association for existing artifact.',
-              },
-              500
-            );
+
+          // 处理 collection 关联
+          let collectionResult = null;
+          if (collectionId || collectionName) {
+            try {
+              collectionResult = await handleCollectionAssociation(
+                c.env,
+                existingArtifact.id,
+                collectionId,
+                collectionName
+              );
+            } catch (collectionError) {
+              console.error(
+                'Error handling collection for existing artifact:',
+                collectionError
+              );
+            }
           }
+
           return c.json({
             success: true,
             r2Path: objectKey,
             artifactId: existingArtifact.id,
-            message: 'File already exists, added to collection successfully.',
-            collection_association: {
-              collection_id: collectionId,
-              added_to_collection: true,
-              add_time: collection_map.add_time,
+            imageInfo: {
+              width: existingArtifact.width,
+              height: existingArtifact.height,
+              format: existingArtifact.format,
+              size: existingArtifact.size,
+              pixels: existingArtifact.pixels,
             },
-          });
-        } else if (existingArtifact) {
-          return c.json({
-            success: true,
-            r2Path: objectKey,
-            artifactId: existingArtifact.id,
-            message: 'File already exists, no collection association made.',
+            message: 'File already exists (detected after upload)',
+            ...(collectionResult && {
+              collection_association: collectionResult,
+            }),
           });
         }
       } catch (findError) {
-        console.error('Error finding existing artifact:', findError);
+        console.error(
+          'Error finding existing artifact after failed creation:',
+          findError
+        );
       }
-      console.error('Failed to create artifact:', artifactPayload);
+
+      // 如果既无法创建也无法找到现有的 artifact，返回错误
       return c.json(
-        { error: 'Failed to create artifact in the database' },
+        {
+          error: 'Failed to create artifact in database',
+          details:
+            'This may be due to a database constraint violation or connection issue',
+        },
         500
       );
-    } // 处理 collection 关联 - 支持通过 ID 或名称
-    let collectionMapping = null;
+    }
+
+    // 处理 collection 关联
     let collectionResult = null;
-    let isNewCollection = false;
-
-    // 优先使用 collection_id，其次使用 collection_name
-    const shouldProcessCollection =
-      (collectionId &&
-        typeof collectionId === 'string' &&
-        collectionId.trim() !== '') ||
-      (collectionName &&
-        typeof collectionName === 'string' &&
-        collectionName.trim() !== '');
-
-    if (shouldProcessCollection) {
+    if (collectionId || collectionName) {
       try {
-        let targetCollection = null;
-
-        // 如果提供了 collection_id，优先使用 ID 查找
-        if (
-          collectionId &&
-          typeof collectionId === 'string' &&
-          collectionId.trim() !== ''
-        ) {
-          targetCollection = await findCollectionById(
-            c.env,
-            collectionId.trim()
-          );
-          if (!targetCollection) {
-            console.warn(`Collection not found for ID: ${collectionId}`);
-          }
-        }
-
-        // 如果没有通过ID找到collection，且提供了名称，则按名称查找或创建
-        if (
-          !targetCollection &&
-          collectionName &&
-          typeof collectionName === 'string' &&
-          collectionName.trim() !== ''
-        ) {
-          targetCollection = await findCollectionByName(
-            c.env,
-            collectionName.trim()
-          ); // 如果按名称没有找到，则创建新的 collection
-          if (!targetCollection) {
-            const currentTime = Date.now();
-            const newCollectionId = crypto.randomUUID();
-            const collectionRecord = {
-              id: newCollectionId,
-              name: collectionName.trim(),
-              description: `由系统自动创建的集合: ${collectionName.trim()}`,
-              create_time: currentTime,
-              update_time: currentTime,
-              cover_artifact_id: undefined,
-              is_deleted: false,
-            };
-
-            const savedCollection = await createCollection(
-              c.env,
-              collectionRecord
-            );
-            if (savedCollection) {
-              targetCollection = collectionRecord;
-              isNewCollection = true;
-              console.log(`Created new collection: ${collectionName.trim()}`);
-            } else {
-              console.error('Failed to create new collection');
-            }
-          }
-        }
-
-        // 如果找到或创建了 collection，则创建关联
-        if (targetCollection) {
-          const currentTime = Date.now();
-          const mappingRecord = {
-            artifact_id: artifactPayload.id,
-            collection_id: targetCollection.id,
-            add_time: currentTime,
-          };
-
-          collectionMapping = await createArtifactCollectionMap(
-            c.env,
-            mappingRecord
-          );
-          if (collectionMapping) {
-            collectionResult = {
-              collection_id: targetCollection.id,
-              collection_name: targetCollection.name,
-              added_to_collection: true,
-              is_new_collection: isNewCollection,
-              add_time: currentTime,
-            };
-          } else {
-            console.warn('Failed to create artifact-collection mapping');
-          }
-        }
+        collectionResult = await handleCollectionAssociation(
+          c.env,
+          artifactPayload.id,
+          collectionId,
+          collectionName
+        );
       } catch (collectionError) {
         console.error(
           'Error handling collection association:',
@@ -251,6 +321,7 @@ app.post('/', async (c) => {
         // 不抛出错误，因为文件已经成功上传
       }
     }
+
     return c.json({
       success: true,
       r2Path: objectKey,
@@ -266,13 +337,6 @@ app.post('/', async (c) => {
       ...(collectionResult && {
         collection_association: collectionResult,
       }),
-      ...(shouldProcessCollection &&
-        !collectionResult && {
-          collection_association: {
-            added_to_collection: false,
-            warning: 'Collection not found or failed to create association',
-          },
-        }),
     });
   } catch (error: any) {
     console.error('Error uploading file:', error.message, error.stack);

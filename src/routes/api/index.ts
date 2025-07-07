@@ -5,6 +5,8 @@ import caption from './caption';
 import upload from './upload';
 import collection from './collection';
 
+import pics from './pics/index';
+
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', async (c, next) => {
   const authHeader = c.req.header('Authorization');
@@ -20,5 +22,7 @@ app.route('/v1/health', health);
 app.route('/v1/caption', caption);
 app.route('/v1/upload', upload);
 app.route('/v1/collection', collection);
+
+app.route('/v1/pics', pics);
 
 export default app;
