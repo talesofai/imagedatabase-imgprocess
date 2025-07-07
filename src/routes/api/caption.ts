@@ -39,6 +39,13 @@ interface GeminiCandidate {
 
 interface GeminiResponse {
   candidates?: GeminiCandidate[];
+  usageMetadata?: {
+    totalTokenCount?: number;
+  };
+  error?: {
+    code: string;
+    message: string;
+  };
 }
 
 interface OpenAIResponse {
@@ -47,6 +54,9 @@ interface OpenAIResponse {
       content: string;
     };
   }>;
+  usage?: {
+    total_tokens?: number;
+  };
 }
 
 app.get('/', async (c) => {
@@ -231,6 +241,7 @@ app.post('/', async (c) => {
     }
 
     let captionText: string | undefined;
+    let totalTokenCount: number | undefined;
 
     if (provider === 'openai') {
       // 4. Call OpenAI API
@@ -283,6 +294,9 @@ app.post('/', async (c) => {
 
       const openaiResult = (await openaiApiResponse.json()) as OpenAIResponse;
       captionText = openaiResult.choices?.[0]?.message?.content;
+      if (openaiResult.usage) {
+        totalTokenCount = openaiResult.usage.total_tokens;
+      }
     } else {
       // 4. Call Gemini API
       const geminiApiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`;
@@ -328,6 +342,9 @@ app.post('/', async (c) => {
 
       const geminiResult = (await geminiApiResponse.json()) as GeminiResponse;
       captionText = geminiResult.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (geminiResult.usageMetadata) {
+        totalTokenCount = geminiResult.usageMetadata.totalTokenCount;
+      }
     }
 
     if (!captionText) {
@@ -373,6 +390,7 @@ app.post('/', async (c) => {
         model: provider === 'openai' ? openaiModel : geminiModel,
         provider: provider,
         prompt: geminiPrompt,
+        total_token_count: totalTokenCount || 0,
         temperature: temperature,
         image_path: body.r2SourcePath,
       };
@@ -435,6 +453,7 @@ app.post('/', async (c) => {
           success: true,
           caption: captionText,
           model_id: provider === 'openai' ? openaiModel : geminiModel,
+          total_token_count: totalTokenCount || 0,
           provider: provider,
           imagepath: body.r2SourcePath,
           caption_id: captionId,
