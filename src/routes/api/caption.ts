@@ -132,8 +132,13 @@ app.get('/', async (c) => {
       }
 
       return {
-        ...caption,
+        id: caption.id,
+        type: caption.type,
+        preset_key: caption.preset_key,
+        upload_time: caption.upload_time,
         value_text: parsedValueText,
+        is_deleted: caption.is_deleted,
+        deleted_time: caption.deleted_time,
       };
     })
   );

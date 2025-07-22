@@ -2,7 +2,7 @@ export async function getResize(
   imgUrl: string,
   shortSize: string
 ): Promise<ArrayBuffer> {
-  const photonServiceUrl = 'https://photon.atou.workers.dev/';
+  const photonServiceUrl = 'https://image.atou.workers.dev/';
   const params = new URLSearchParams({
     url: imgUrl,
     short: shortSize,
